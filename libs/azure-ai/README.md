@@ -110,6 +110,11 @@ print(' '.join(chunk.content for chunk in message_stream))
       - Request/tracing/metrics middleware for HTTP observability
       - Graceful fallback when `APPLICATIONINSIGHTS_CONNECTION_STRING` not set
     
+    - **[NEW] Connectors for M365 and Azure**:
+      - `CopilotStudioConnector` - Export agents to Microsoft 365 Copilot
+      - `TeamsBotConnector` - Microsoft Teams bot integration with Adaptive Cards
+      - `AzureFunctionsDeployer` - Serverless deployment with auto-scaling
+    
     - **[NEW] Comprehensive Test Suite**:
       - Unit tests for all wrapper types and observability components
       - Integration tests for Azure OpenAI and Foundry
