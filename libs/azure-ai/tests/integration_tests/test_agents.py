@@ -351,6 +351,14 @@ class TestAzureFoundryIntegration:
                         op = operators.get(type(node.op))
                         if op is None:
                             raise ValueError(f"Unsupported operation: {type(node.op)}")
+                        # Special handling for power operator to prevent DoS
+                        if isinstance(node.op, ast.Pow):
+                            base = safe_eval(node.left)
+                            exponent = safe_eval(node.right)
+                            # Limit exponent to prevent computational DoS
+                            if abs(exponent) > 1000:
+                                raise ValueError("Exponent too large (max: 1000)")
+                            return op(base, exponent)
                         return op(safe_eval(node.left), safe_eval(node.right))
                     elif isinstance(node, ast.UnaryOp):  # unary operation
                         op = operators.get(type(node.op))
