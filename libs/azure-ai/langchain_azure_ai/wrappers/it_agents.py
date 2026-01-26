@@ -187,11 +187,6 @@ When uncertain, escalate to human review with a clear summary of the issue.""",
 
         config: Dict[str, Any] = {"configurable": configurable}
 
-        result = self.invoke(
-            {"messages": [{"role": "user", "content": message}]},
-            config=config,
-        )
-
         # Extract response
         response_text = self.chat(message, thread_id=session_id)
 
