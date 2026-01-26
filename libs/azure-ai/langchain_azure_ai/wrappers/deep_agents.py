@@ -367,6 +367,9 @@ Maintain compliance and candidate experience throughout the process.""",
             "results": {},
         }
 
+        if self._agent is None:
+            raise RuntimeError("Agent not initialized. Call _initialize() first.")
+
         result = self._agent.invoke(initial_state, config=config)
 
         return {

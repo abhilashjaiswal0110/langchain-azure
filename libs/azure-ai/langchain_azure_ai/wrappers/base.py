@@ -343,11 +343,13 @@ class FoundryAgentWrapper(ABC):
         Returns:
             The agent's response as a string.
         """
+        import uuid
+
         input_dict = {"messages": [HumanMessage(content=message)]}
 
-        config = None
-        if thread_id:
-            config = {"configurable": {"thread_id": thread_id}}
+        # Always provide a thread_id for checkpointer (generate one if not provided)
+        effective_thread_id = thread_id or str(uuid.uuid4())
+        config = {"configurable": {"thread_id": effective_thread_id}}
 
         result = self.invoke(input_dict, config=config, **kwargs)
 

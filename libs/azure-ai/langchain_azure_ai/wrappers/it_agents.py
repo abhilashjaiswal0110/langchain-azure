@@ -176,16 +176,16 @@ When uncertain, escalate to human review with a clear summary of the issue.""",
         Returns:
             Response dictionary with session info and agent response.
         """
-        config = {
-            "configurable": {
-                "thread_id": session_id,
-            }
+        configurable: Dict[str, Any] = {
+            "thread_id": session_id,
         }
 
         if metadata:
-            config["configurable"]["metadata"] = metadata
+            configurable["metadata"] = metadata
         if user_id:
-            config["configurable"]["user_id"] = user_id
+            configurable["user_id"] = user_id
+
+        config: Dict[str, Any] = {"configurable": configurable}
 
         result = self.invoke(
             {"messages": [{"role": "user", "content": message}]},
