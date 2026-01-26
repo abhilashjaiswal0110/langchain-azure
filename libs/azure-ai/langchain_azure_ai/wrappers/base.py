@@ -213,7 +213,9 @@ class FoundryAgentWrapper(ABC):
 
         except Exception as e:
             logger.error(f"Failed to create Azure AI Foundry agent: {e}")
-            logger.info("Falling back to direct LangChain agent")
+            logger.warning(
+                "Falling back to direct LangChain agent after Azure AI Foundry initialization failure"
+            )
             self._create_direct_agent()
 
     def _create_direct_agent(self) -> None:
