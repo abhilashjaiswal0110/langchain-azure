@@ -735,8 +735,12 @@ async def deep_agent_chat_stream(agent_name: str, request: ChatRequest):
                 
                 await asyncio.sleep(0.1)
                 
-                # Get response from agent
-                response_text = agent.chat(request.message, thread_id=session_id)
+                # Get response from agent without blocking the event loop
+                response_text = await asyncio.to_thread(
+                    agent.chat,
+                    request.message,
+                    thread_id=session_id,
+                )
                 
                 # Send complete event
                 yield f"data: {json.dumps({'type': 'complete', 'data': {'response': response_text, 'session_id': session_id}})}\n\n"
