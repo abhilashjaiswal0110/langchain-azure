@@ -321,12 +321,46 @@ class TestAzureFoundryIntegration:
         """Test Foundry agent with custom tools."""
         from langchain_azure_ai.wrappers import ResearchAgentWrapper
         from langchain_core.tools import tool
+        import ast
+        import operator
         
         @tool
         def calculate(expression: str) -> str:
             """Calculate a mathematical expression."""
             try:
-                return str(eval(expression))
+                # Safe expression evaluator using ast
+                # Only allows basic arithmetic operations
+                def safe_eval(node):
+                    operators = {
+                        ast.Add: operator.add,
+                        ast.Sub: operator.sub,
+                        ast.Mult: operator.mul,
+                        ast.Div: operator.truediv,
+                        ast.Pow: operator.pow,
+                        ast.USub: operator.neg,
+                        ast.UAdd: operator.pos,
+                    }
+                    
+                    if isinstance(node, ast.Num):  # number
+                        return node.n
+                    elif isinstance(node, ast.Constant):  # Python 3.8+
+                        return node.value
+                    elif isinstance(node, ast.BinOp):  # binary operation
+                        op = operators.get(type(node.op))
+                        if op is None:
+                            raise ValueError(f"Unsupported operation: {type(node.op)}")
+                        return op(safe_eval(node.left), safe_eval(node.right))
+                    elif isinstance(node, ast.UnaryOp):  # unary operation
+                        op = operators.get(type(node.op))
+                        if op is None:
+                            raise ValueError(f"Unsupported operation: {type(node.op)}")
+                        return op(safe_eval(node.operand))
+                    else:
+                        raise ValueError(f"Unsupported expression: {type(node)}")
+                
+                tree = ast.parse(expression, mode='eval')
+                result = safe_eval(tree.body)
+                return str(result)
             except Exception:
                 return "Error calculating"
         
