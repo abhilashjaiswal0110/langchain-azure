@@ -346,10 +346,10 @@ def load_additional_agents():
     
     Note: This function is only useful if load_agents() was called with load_critical_only=True.
     If load_agents() was called with load_critical_only=False (the default), all agents are
-    already loaded and this function will have no effect.
+    already loaded and calling this function will re-register them (which is harmless but unnecessary).
     """
     # Simply call load_agents with load_critical_only=False to ensure all agents are loaded
-    # The registry will skip agents that are already loaded
+    # This will re-register any agents that were already loaded, but that's harmless
     load_agents(load_critical_only=False)
 
 
