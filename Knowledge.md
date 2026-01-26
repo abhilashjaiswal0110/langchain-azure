@@ -216,6 +216,66 @@ To use this repository effectively, you need:
 
 ## Updates Log
 
+### 2026-01-26 - Phase 3: Copilot Studio, Teams Bot & Azure Functions
+
+**Connectors Module** (`langchain_azure_ai.connectors`)
+
+1. **Copilot Studio Connector** (`copilot_studio.py`)
+   - `CopilotStudioConnector` - Export LangChain agents to Microsoft 365 Copilot
+   - `AgentManifest` - Plugin manifest with OpenAPI spec generation
+   - `CopilotAction`, `CopilotTopic` - Define agent capabilities
+   - `export_agent()` - Create M365 Copilot plugin from agent
+   - `create_m365_copilot_plugin()` - Full plugin package with Teams manifest
+   - `publish_to_copilot_studio()` - Direct deployment to Copilot Studio
+
+2. **Teams Bot Connector** (`teams_bot.py`)
+   - `TeamsBotConnector` - Microsoft Teams bot integration
+   - `TeamsActivity` - Message parsing and response building
+   - `TeamsAdaptiveCard` - Rich card builder (add_text, add_header, add_fact_set, etc.)
+   - `create_fastapi_routes()` - FastAPI router generation
+   - `generate_manifest()` - Teams app manifest creation
+   - Proactive messaging support
+
+3. **Azure Functions Deployer** (`azure_functions.py`)
+   - `AzureFunctionsDeployer` - Serverless deployment to Azure Functions
+   - `FunctionAppConfig` - Function app configuration
+   - `ScalingConfig` - Auto-scaling settings (min/max instances, cooldowns)
+   - `generate_scaffold()` - Full function app project generation
+   - Bicep template generation for Azure infrastructure
+   - Deploy scripts (bash and PowerShell)
+   - GitHub Actions CI/CD workflow generation
+
+**Usage Examples:**
+
+```python
+# Export agent to Copilot Studio
+from langchain_azure_ai.connectors import CopilotStudioConnector
+
+connector = CopilotStudioConnector()
+manifest = connector.export_agent(
+    agent=my_agent,
+    name="IT Helpdesk",
+    description="IT support agent"
+)
+manifest.save("output/")
+
+# Create Teams bot
+from langchain_azure_ai.connectors import TeamsBotConnector
+
+bot = TeamsBotConnector()
+bot.register_agent("helpdesk", helpdesk_agent)
+router = bot.create_fastapi_routes()
+
+# Deploy to Azure Functions
+from langchain_azure_ai.connectors import AzureFunctionsDeployer
+
+deployer = AzureFunctionsDeployer()
+deployer.generate_scaffold(
+    agents={"helpdesk": helpdesk_agent},
+    output_dir="functions_app"
+)
+```
+
 ### 2026-01-24 - Phase 2: Observability & Testing
 - **Azure Monitor OpenTelemetry Integration**
   - Added `langchain_azure_ai.observability` module with `TelemetryConfig`, `AgentTelemetry`, `ExecutionMetrics`
