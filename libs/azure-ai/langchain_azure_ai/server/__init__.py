@@ -183,12 +183,37 @@ class AgentRegistry:
 registry = AgentRegistry()
 
 
-def load_agents():
-    """Load and register all wrapped agents.
+def _register_agent_safe(register_func, agent_id: str, agent_wrapper, agent_type: str = "agent"):
+    """Safely register an agent with error handling.
+    
+    Args:
+        register_func: The registry function to call (e.g., registry.register_it_agent)
+        agent_id: The unique identifier for the agent
+        agent_wrapper: The agent wrapper instance to register
+        agent_type: Human-readable agent type for logging (default: "agent")
+    """
+    try:
+        register_func(agent_id, agent_wrapper)
+        logger.info(f"{agent_type} '{agent_id}' loaded")
+    except Exception as e:
+        logger.warning(f"Failed to load {agent_type} '{agent_id}': {e}")
 
-    This function should be customized to load your specific agents.
-    It reads configuration from environment variables.
-    Uses lazy initialization for faster startup.
+
+def load_agents(load_critical_only: bool = False):
+    """Load and register wrapped agents.
+
+    This function loads agents based on the specified mode:
+    - Critical agents (load_critical_only=True): Loads only essential agents needed for basic functionality
+      (IT helpdesk, research agent, IT operations). Use this for faster startup times.
+    - All agents (load_critical_only=False): Loads all available agents. This is the default mode.
+
+    Configuration is read from environment variables:
+    - USE_AZURE_FOUNDRY: Enable Azure AI Foundry integration (default: "true")
+    - AZURE_OPENAI_DEPLOYMENT_NAME: Model to use (default: "gpt-4o-mini")
+
+    Args:
+        load_critical_only: If True, only load critical agents for faster startup.
+                           If False, load all agents (default).
     """
     from langchain_azure_ai.wrappers import (
         ITHelpdeskWrapper,
@@ -212,213 +237,120 @@ def load_agents():
     # For o4-mini, temperature must be 1.0
     temperature = 1.0 if "o4" in model.lower() else 0.0
 
-    logger.info(f"Loading agents with Azure AI Foundry: {use_foundry}")
+    mode = "critical agents only" if load_critical_only else "all agents"
+    logger.info(f"Loading {mode} with Azure AI Foundry: {use_foundry}")
     logger.info(f"Using model: {model}, temperature: {temperature}")
 
-    # Load all IT Agents
-    try:
-        registry.register_it_agent(
-            "helpdesk",
-            ITHelpdeskWrapper(name="it-helpdesk", model=model, temperature=temperature),
-        )
-        logger.info("IT helpdesk agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load IT helpdesk agent: {e}")
+    # Critical IT Agents - always loaded
+    _register_agent_safe(
+        registry.register_it_agent,
+        "helpdesk",
+        ITHelpdeskWrapper(name="it-helpdesk", model=model, temperature=temperature),
+        "IT helpdesk agent"
+    )
 
-    try:
-        registry.register_it_agent(
+    # Additional IT Agents - only loaded in full mode
+    if not load_critical_only:
+        _register_agent_safe(
+            registry.register_it_agent,
             "servicenow",
             ServiceNowWrapper(name="servicenow-agent", model=model, temperature=temperature),
+            "ServiceNow agent"
         )
-        logger.info("ServiceNow agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load ServiceNow agent: {e}")
-
-    try:
-        registry.register_it_agent(
+        _register_agent_safe(
+            registry.register_it_agent,
             "hitl_support",
             HITLSupportWrapper(name="hitl-support", model=model, temperature=temperature),
+            "HITL Support agent"
         )
-        logger.info("HITL Support agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load HITL Support agent: {e}")
 
-    # Load all Enterprise Agents
-    try:
-        registry.register_enterprise_agent(
-            "research",
-            ResearchAgentWrapper(name="research-agent", model=model, temperature=temperature),
-        )
-        logger.info("Enterprise research agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Enterprise research agent: {e}")
+    # Critical Enterprise Agent - always loaded
+    _register_agent_safe(
+        registry.register_enterprise_agent,
+        "research",
+        ResearchAgentWrapper(name="research-agent", model=model, temperature=temperature),
+        "Enterprise research agent"
+    )
 
-    try:
-        registry.register_enterprise_agent(
+    # Additional Enterprise Agents - only loaded in full mode
+    if not load_critical_only:
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "content",
             ContentAgentWrapper(name="content-agent", model=model, temperature=temperature),
+            "Content agent"
         )
-        logger.info("Content agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Content agent: {e}")
-
-    try:
-        registry.register_enterprise_agent(
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "data_analyst",
             DataAnalystWrapper(name="data-analyst-agent", model=model, temperature=temperature),
+            "Data Analyst agent"
         )
-        logger.info("Data Analyst agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Data Analyst agent: {e}")
-
-    try:
-        registry.register_enterprise_agent(
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "document",
             DocumentAgentWrapper(name="document-agent", model=model, temperature=temperature),
+            "Document agent"
         )
-        logger.info("Document agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Document agent: {e}")
-
-    try:
-        registry.register_enterprise_agent(
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "code_assistant",
             CodeAssistantWrapper(name="code-assistant-agent", model=model, temperature=temperature),
+            "Code Assistant agent"
         )
-        logger.info("Code Assistant agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Code Assistant agent: {e}")
-
-    try:
-        registry.register_enterprise_agent(
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "rag",
             RAGAgentWrapper(name="rag-agent", model=model, temperature=temperature),
+            "RAG agent"
         )
-        logger.info("RAG agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load RAG agent: {e}")
-
-    try:
-        registry.register_enterprise_agent(
+        _register_agent_safe(
+            registry.register_enterprise_agent,
             "document_intelligence",
             DocumentIntelligenceWrapper(name="document-intelligence-agent", model=model, temperature=temperature),
+            "Document Intelligence agent"
         )
-        logger.info("Document Intelligence agent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Document Intelligence agent: {e}")
 
-    # Load all DeepAgents
-    try:
-        registry.register_deep_agent(
-            "it_operations",
-            ITOperationsWrapper(name="it-operations", model=model, temperature=temperature),
-        )
-        logger.info("IT Operations DeepAgent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load IT Operations DeepAgent: {e}")
+    # Critical DeepAgent - always loaded
+    _register_agent_safe(
+        registry.register_deep_agent,
+        "it_operations",
+        ITOperationsWrapper(name="it-operations", model=model, temperature=temperature),
+        "IT Operations DeepAgent"
+    )
 
-    try:
-        registry.register_deep_agent(
+    # Additional DeepAgents - only loaded in full mode
+    if not load_critical_only:
+        _register_agent_safe(
+            registry.register_deep_agent,
             "sales_intelligence",
             SalesIntelligenceWrapper(name="sales-intelligence", model=model, temperature=temperature),
+            "Sales Intelligence DeepAgent"
         )
-        logger.info("Sales Intelligence DeepAgent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Sales Intelligence DeepAgent: {e}")
-
-    try:
-        registry.register_deep_agent(
+        _register_agent_safe(
+            registry.register_deep_agent,
             "recruitment",
             RecruitmentWrapper(name="recruitment", model=model, temperature=temperature),
+            "Recruitment DeepAgent"
         )
-        logger.info("Recruitment DeepAgent loaded")
-    except Exception as e:
-        logger.warning(f"Failed to load Recruitment DeepAgent: {e}")
 
     registry._initialized = True
     logger.info(f"Total agents loaded: {registry.total_agents}")
 
 
 def load_additional_agents():
-    """Load additional agents on demand.
+    """Load additional non-critical agents on demand.
     
-    Call this to load all remaining agents after initial startup.
+    This function loads all agents that were not loaded during the initial critical-only startup.
+    Call this after startup to load the remaining agents without blocking the initial server startup.
+    
+    Note: This function is only useful if load_agents() was called with load_critical_only=True.
+    If load_agents() was called with load_critical_only=False (the default), all agents are
+    already loaded and calling this function will re-register them (which is harmless but unnecessary).
     """
-    from langchain_azure_ai.wrappers import (
-        ServiceNowWrapper,
-        HITLSupportWrapper,
-        ContentAgentWrapper,
-        DataAnalystWrapper,
-        DocumentAgentWrapper,
-        CodeAssistantWrapper,
-        RAGAgentWrapper,
-        DocumentIntelligenceWrapper,
-        SalesIntelligenceWrapper,
-        RecruitmentWrapper,
-    )
-
-    model = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini")
-    temperature = 1.0 if "o4" in model.lower() else 0.0
-
-    # Load remaining IT Agents
-    if "servicenow" not in registry.it_agents:
-        try:
-            registry.register_it_agent(
-                "servicenow",
-                ServiceNowWrapper(name="servicenow-agent", model=model, temperature=temperature),
-            )
-            registry.register_it_agent(
-                "hitl_support",
-                HITLSupportWrapper(name="hitl-support", model=model, temperature=temperature),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load additional IT agents: {e}")
-
-    # Load remaining Enterprise Agents
-    if "content" not in registry.enterprise_agents:
-        try:
-            registry.register_enterprise_agent(
-                "content",
-                ContentAgentWrapper(name="content-agent", model=model, temperature=temperature),
-            )
-            registry.register_enterprise_agent(
-                "data_analyst",
-                DataAnalystWrapper(name="data-analyst-agent", model=model, temperature=temperature),
-            )
-            registry.register_enterprise_agent(
-                "document",
-                DocumentAgentWrapper(name="document-agent", model=model, temperature=temperature),
-            )
-            registry.register_enterprise_agent(
-                "code_assistant",
-                CodeAssistantWrapper(name="code-assistant-agent", model=model, temperature=temperature),
-            )
-            registry.register_enterprise_agent(
-                "rag",
-                RAGAgentWrapper(name="rag-agent", model=model, temperature=temperature),
-            )
-            registry.register_enterprise_agent(
-                "document_intelligence",
-                DocumentIntelligenceWrapper(name="document-intelligence-agent", model=model, temperature=temperature),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load additional Enterprise agents: {e}")
-
-    # Load remaining DeepAgents
-    if "sales_intelligence" not in registry.deep_agents:
-        try:
-            registry.register_deep_agent(
-                "sales_intelligence",
-                SalesIntelligenceWrapper(name="sales-intelligence", model=model, temperature=temperature),
-            )
-            registry.register_deep_agent(
-                "recruitment",
-                RecruitmentWrapper(name="recruitment", model=model, temperature=temperature),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load additional DeepAgents: {e}")
-
-    logger.info(f"Total agents after additional loading: {registry.total_agents}")
+    # Simply call load_agents with load_critical_only=False to ensure all agents are loaded
+    # This will re-register any agents that were already loaded, but that's harmless
+    load_agents(load_critical_only=False)
 
 
 @asynccontextmanager
