@@ -341,10 +341,12 @@ class TestAzureFoundryIntegration:
                         ast.UAdd: operator.pos,
                     }
                     
-                    if isinstance(node, ast.Num):  # number
-                        return node.n
-                    elif isinstance(node, ast.Constant):  # Python 3.8+
-                        return node.value
+                    if isinstance(node, ast.Constant):
+                        # Ensure the constant is a number
+                        if isinstance(node.value, (int, float)):
+                            return node.value
+                        else:
+                            raise ValueError(f"Unsupported constant type: {type(node.value)}")
                     elif isinstance(node, ast.BinOp):  # binary operation
                         op = operators.get(type(node.op))
                         if op is None:
