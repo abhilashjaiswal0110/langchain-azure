@@ -48,10 +48,16 @@ langchain-azure/
    - `AzureAIImageAnalysisTool` - Image analysis
    - `AIServicesToolkit` - Unified access to all tools
 
-5. **Observability**
+5. **Enterprise Observability & Monitoring**
    - `AzureAIOpenTelemetryTracer` - OpenTelemetry tracing integration
-   - Azure Application Insights support
-   - Semantic conventions for GenAI
+   - Azure Monitor (Application Insights) integration
+   - LangSmith tracing support
+   - Session and user tracking
+   - Custom telemetry dimensions (agent_name, session_id, user_id, message/response lengths)
+   - AgentTelemetry wrapper for execution metrics
+   - Dual observability stack (Azure Monitor + LangSmith)
+   - Production-ready monitoring middleware
+   - Graceful degradation if telemetry unavailable
 
 6. **Additional Features**
    - Chat message histories with Cosmos DB
@@ -166,15 +172,124 @@ The package supports multiple authentication methods:
    - Using `credential="your-api-key"`
    - Simpler for development
 
+## Observability & Monitoring
+
+### Built-in Observability Features
+
+The server implementation includes comprehensive observability:
+
+**1. Azure Monitor (Application Insights)**
+- OpenTelemetry instrumentation enabled by default
+- Custom dimensions on all requests:
+  - `agent_name`, `agent_type`
+  - `session_id`, `user_id`
+  - `message_length`, `response_length`
+  - Custom metadata fields
+- Request/response tracking with duration
+- Exception tracking with stack traces
+- Live Metrics support
+
+**Configuration:**
+```bash
+APPLICATIONSIGHTS_CONNECTION_STRING="InstrumentationKey=..."
+ENABLE_AZURE_MONITOR=true  # Default: true
+```
+
+**2. LangSmith Tracing**
+- Native LangChain/LangGraph tracing
+- Full execution graphs
+- LLM call inspection
+- Tool invocation tracking
+- Session continuity
+
+**Configuration:**
+```bash
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY="your-api-key"
+LANGCHAIN_PROJECT="your-project-name"
+```
+
+**3. Session & User Tracking**
+- Unique session IDs per conversation
+- Session continuity across requests
+- User ID tracking (anonymous support)
+- User-scoped analytics
+- Metadata propagation through telemetry stack
+
+**Usage Example:**
+```python
+from langchain_azure_ai.server import ChatRequest
+
+request = ChatRequest(
+    message="Help me with this issue",
+    session_id="session-123",
+    user_id="user-456",
+    metadata={
+        "environment": "production",
+        "source": "web-app",
+        "priority": "high"
+    }
+)
+```
+
+**4. AgentTelemetry Wrapper**
+- Execution duration tracking
+- Success/failure metrics
+- Custom attributes per execution
+- Error handling and reporting
+
+**Server Middleware:**
+- RequestLoggingMiddleware: HTTP logging with request IDs
+- TracingMiddleware: OpenTelemetry span creation
+- MetricsMiddleware: Request count, duration, active requests
+
+### Querying Observability Data
+
+**Application Insights (KQL):**
+```kusto
+// Agent execution times
+requests
+| where timestamp > ago(1h)
+| where customDimensions.agent_name != ""
+| project timestamp, duration, 
+    agent_name = customDimensions.agent_name,
+    session_id = customDimensions.session_id,
+    user_id = customDimensions.user_id
+| order by timestamp desc
+
+// Session analytics
+requests
+| where customDimensions.session_id != ""
+| summarize 
+    request_count = count(),
+    avg_duration = avg(duration)
+    by session_id = tostring(customDimensions.session_id)
+```
+
+**LangSmith:**
+- Navigate to https://smith.langchain.com
+- Select your project
+- Filter by session_id, user_id, or time range
+- View full execution traces with LLM inputs/outputs
+
 ## Environment Variables
 
 Key environment variables used:
+
+**Core Configuration:**
 - `AZURE_AI_PROJECT_ENDPOINT` - Azure AI Foundry project endpoint
 - `AZURE_OPENAI_API_KEY` - API key for Azure OpenAI
 - `AZURE_OPENAI_ENDPOINT` - Azure OpenAI endpoint
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` - For telemetry
+- `AZURE_OPENAI_DEPLOYMENT_NAME` - Model deployment name
+
+**Observability Configuration:**
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` - Application Insights connection
+- `ENABLE_AZURE_MONITOR` - Enable Azure Monitor (default: true)
 - `LANGCHAIN_API_KEY` - For LangSmith integration
-- `LANGCHAIN_TRACING_V2=true` - Enable LangSmith tracing
+- `LANGCHAIN_TRACING_V2` - Enable LangSmith tracing (true/false)
+- `LANGCHAIN_PROJECT` - LangSmith project name
+- `ENABLE_REQUEST_LOGGING` - Enable request logging (default: true)
+- `ENABLE_TOKEN_TRACKING` - Enable token tracking (default: true)
 
 ## Samples Included
 
