@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -1101,6 +1102,310 @@ async def deep_agent_upload(
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Evaluation Endpoints
+# =============================================================================
+
+class EvaluationRequest(BaseModel):
+    """Request model for agent evaluation."""
+    message: str = Field(..., description="Message to evaluate")
+    session_id: Optional[str] = Field(None, description="Session ID")
+
+
+class OfflineEvalRequest(BaseModel):
+    """Request model for offline evaluation."""
+    agent_name: str = Field(..., description="Name of agent to evaluate")
+    dataset_name: Optional[str] = Field(None, description="Dataset name (uses agent default if not provided)")
+    experiment_name: Optional[str] = Field(None, description="Experiment name")
+
+
+@app.post(
+    "/api/evaluate/{agent_name}",
+    tags=["evaluation"],
+    summary="Evaluate Agent Response",
+    description="Evaluate an agent's response using multiple quality metrics.",
+)
+async def evaluate_agent(agent_name: str, request: EvaluationRequest):
+    """Evaluate agent response quality in real-time."""
+    try:
+        from langchain_azure_ai.evaluation import (
+            evaluate_agent_response,
+            ResponseQualityEvaluator,
+            TaskCompletionEvaluator,
+            CoherenceEvaluator,
+            SafetyEvaluator,
+        )
+
+        # Get agent
+        agent = (
+            registry.get_it_agent(agent_name)
+            or registry.get_enterprise_agent(agent_name)
+            or registry.get_deep_agent(agent_name)
+        )
+
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+
+        session_id = request.session_id or str(uuid.uuid4())
+
+        # Get agent response
+        response = agent.chat(request.message, thread_id=session_id)
+
+        # Evaluate response
+        evaluators = [
+            ResponseQualityEvaluator(min_length=50, max_length=2000),
+            TaskCompletionEvaluator(),
+            CoherenceEvaluator(),
+            SafetyEvaluator(),
+        ]
+
+        eval_results = evaluate_agent_response(
+            input_text=request.message,
+            output_text=response,
+            evaluators=evaluators,
+        )
+
+        # Format results
+        results = {}
+        for name, result in eval_results.items():
+            results[name] = {
+                "score": result.score,
+                "passed": result.passed,
+                "feedback": result.feedback,
+                "details": result.details,
+            }
+
+        return {
+            "agent_name": agent_name,
+            "input": request.message,
+            "output": response,
+            "session_id": session_id,
+            "evaluation_results": results,
+            "overall_score": sum(r.score for r in eval_results.values()) / len(eval_results),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in evaluation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get(
+    "/api/metrics/{agent_name}",
+    tags=["evaluation"],
+    summary="Get Agent Metrics",
+    description="Get performance metrics for an agent over the last 24 hours.",
+)
+async def get_agent_performance_metrics(agent_name: str, window_hours: int = 24):
+    """Get agent performance metrics."""
+    try:
+        from langchain_azure_ai.evaluation import get_agent_metrics
+
+        metrics = get_agent_metrics(agent_name, window_hours)
+
+        return {
+            "agent_name": metrics.agent_name,
+            "time_period": metrics.time_period,
+            "total_requests": metrics.total_requests,
+            "successful_requests": metrics.successful_requests,
+            "failed_requests": metrics.failed_requests,
+            "success_rate": f"{metrics.success_rate:.2%}",
+            "error_rate": f"{metrics.error_rate:.2%}",
+            "avg_response_time_ms": round(metrics.avg_response_time_ms, 2),
+            "p50_response_time_ms": round(metrics.p50_response_time_ms, 2),
+            "p95_response_time_ms": round(metrics.p95_response_time_ms, 2),
+            "p99_response_time_ms": round(metrics.p99_response_time_ms, 2),
+            "total_tokens": metrics.total_tokens,
+            "avg_tokens_per_request": round(metrics.avg_tokens_per_request, 2),
+            "estimated_cost_usd": f"${metrics.estimated_cost_usd:.4f}",
+            "avg_user_rating": metrics.avg_user_rating,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get(
+    "/api/evaluation/datasets",
+    tags=["evaluation"],
+    summary="List Evaluation Datasets",
+    description="Get summary of all available evaluation datasets.",
+)
+async def list_evaluation_datasets():
+    """List all available evaluation datasets."""
+    try:
+        from langchain_azure_ai.evaluation.datasets import get_dataset_summary
+
+        summary = get_dataset_summary()
+        return {
+            "datasets": summary,
+            "total_agents": len(summary),
+            "total_test_cases": sum(ds["total_cases"] for ds in summary.values()),
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing datasets: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/api/evaluation/run-offline",
+    tags=["evaluation"],
+    summary="Run Offline Evaluation",
+    description="Run comprehensive offline evaluation using LangSmith datasets.",
+)
+async def run_offline_evaluation(request: OfflineEvalRequest):
+    """Run offline evaluation against dataset."""
+    try:
+        from langchain_azure_ai.evaluation import (
+            LangSmithEvaluator,
+            ResponseQualityEvaluator,
+            TaskCompletionEvaluator,
+        )
+        from langchain_azure_ai.evaluation.datasets import get_dataset, AGENT_DATASETS
+
+        # Get agent
+        agent = (
+            registry.get_it_agent(request.agent_name)
+            or registry.get_enterprise_agent(request.agent_name)
+            or registry.get_deep_agent(request.agent_name)
+        )
+
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{request.agent_name}' not found")
+
+        # Use agent-specific dataset if no dataset name provided
+        dataset_name = request.dataset_name or f"{request.agent_name}-dataset"
+
+        # Get or create dataset
+        langsmith_eval = LangSmithEvaluator()
+
+        # Sync dataset from local if available
+        if request.agent_name in AGENT_DATASETS:
+            logger.info(f"Syncing dataset for {request.agent_name} to LangSmith")
+            test_cases = get_dataset(request.agent_name)
+            if test_cases:
+                langsmith_eval.sync_dataset_from_local(
+                    dataset_name=dataset_name,
+                    test_cases=test_cases,
+                )
+
+        # Register evaluators
+        langsmith_eval.register_evaluator(ResponseQualityEvaluator())
+        langsmith_eval.register_evaluator(TaskCompletionEvaluator())
+
+        # Run evaluation
+        async def agent_func(input_text: str) -> str:
+            return agent.chat(input_text)
+
+        experiment = await langsmith_eval.run_offline_evaluation(
+            agent_func=agent_func,
+            dataset_name=dataset_name,
+            experiment_name=request.experiment_name,
+        )
+
+        return {
+            "experiment_id": experiment.id,
+            "experiment_name": experiment.name,
+            "dataset_name": experiment.dataset_name,
+            "status": "completed" if not experiment.metadata.get("error") else "failed",
+            "total_tests": len(experiment.results),
+            "metrics": experiment.metrics,
+            "error": experiment.metadata.get("error"),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in offline evaluation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/api/evaluation/run-foundry",
+    tags=["evaluation"],
+    summary="Run Azure AI Foundry Evaluation",
+    description="Run evaluation using Azure AI Foundry built-in metrics.",
+)
+async def run_foundry_evaluation(request: OfflineEvalRequest):
+    """Run Azure AI Foundry evaluation."""
+    try:
+        from langchain_azure_ai.evaluation import AzureAIFoundryEvaluator
+        from langchain_azure_ai.evaluation.datasets import get_dataset
+
+        # Get agent
+        agent = (
+            registry.get_it_agent(request.agent_name)
+            or registry.get_enterprise_agent(request.agent_name)
+            or registry.get_deep_agent(request.agent_name)
+        )
+
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{request.agent_name}' not found")
+
+        # Get test data
+        test_data = get_dataset(request.agent_name)
+        if not test_data:
+            raise HTTPException(status_code=404, detail=f"No dataset found for '{request.agent_name}'")
+
+        # Run evaluation
+        foundry_eval = AzureAIFoundryEvaluator()
+
+        async def agent_func(input_text: str) -> str:
+            return agent.chat(input_text)
+
+        result = await foundry_eval.run_evaluation(
+            agent_func=agent_func,
+            test_data=test_data,
+            metrics=["groundedness", "relevance", "coherence", "fluency"],
+            evaluation_name=request.experiment_name,
+        )
+
+        return {
+            "evaluation_id": result.id,
+            "evaluation_name": result.name,
+            "status": result.status,
+            "total_tests": len(result.test_results),
+            "metrics": {
+                name: {"score": metric.score, "passed": metric.passed}
+                for name, metric in result.metrics.items()
+            },
+            "summary": result.summary,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in Foundry evaluation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get(
+    "/api/evaluation/langsmith/status",
+    tags=["evaluation"],
+    summary="Check LangSmith Connection",
+    description="Verify LangSmith configuration and connection status.",
+)
+async def check_langsmith_status():
+    """Check LangSmith connection status."""
+    try:
+        from langchain_azure_ai.evaluation import (
+            verify_tracing_config,
+            test_langsmith_connection,
+        )
+
+        config_status = verify_tracing_config()
+        connection_status = test_langsmith_connection()
+
+        return {
+            "configuration": config_status,
+            "connection": connection_status,
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking LangSmith status: {e}", exc_info=True)
+        return {
+            "configuration": {"status": "ERROR", "error": str(e)},
+            "connection": {"connected": False, "error": str(e)},
+        }
 
 
 def create_app() -> FastAPI:
