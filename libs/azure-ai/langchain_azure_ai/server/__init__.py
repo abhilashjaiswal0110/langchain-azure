@@ -56,14 +56,22 @@ try:
         MetricsMiddleware,
     )
     OBSERVABILITY_AVAILABLE = True
-    # Setup Azure Monitor at module load
-    azure_monitor_enabled = setup_azure_monitor()
-    if azure_monitor_enabled:
-        logger.info("Azure Monitor OpenTelemetry initialized for server")
-except ImportError:
+    # Setup Azure Monitor at module load (enabled by default)
+    enable_monitoring = os.getenv("ENABLE_AZURE_MONITOR", "true").lower() == "true"
+    if enable_monitoring:
+        azure_monitor_enabled = setup_azure_monitor()
+        if azure_monitor_enabled:
+            logger.info("✓ Azure Monitor OpenTelemetry initialized for server")
+            logger.info("✓ Tracing enabled: Application Insights + LangSmith")
+        else:
+            logger.warning("Azure Monitor setup attempted but not fully initialized")
+    else:
+        azure_monitor_enabled = False
+        logger.info("Azure Monitor disabled (set ENABLE_AZURE_MONITOR=true to enable)")
+except (ImportError, Exception) as e:
     OBSERVABILITY_AVAILABLE = False
     azure_monitor_enabled = False
-    logger.debug("Observability module not available")
+    logger.warning(f"Observability not available: {e}")
 
 
 # Request/Response Models
@@ -75,6 +83,18 @@ class ChatRequest(BaseModel):
     user_id: Optional[str] = Field(None, description="User ID")
     stream: bool = Field(False, description="Whether to stream the response")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    
+    def get_telemetry_context(self) -> Dict[str, str]:
+        """Extract telemetry context from request."""
+        context = {}
+        if self.user_id:
+            context["user_id"] = self.user_id
+        if self.session_id:
+            context["session_id"] = self.session_id
+        if self.metadata:
+            for key, value in self.metadata.items():
+                context[f"metadata_{key}"] = str(value)
+        return context
 
 
 class ChatResponse(BaseModel):
@@ -444,7 +464,18 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
     # Startup
     logger.info("Starting Azure AI Foundry Agent Server...")
-    load_agents()
+    
+    # Load agents in background to avoid blocking startup
+    async def load_agents_async():
+        try:
+            await asyncio.to_thread(load_agents)
+            logger.info(f"Agent loading complete. Total agents: {registry.total_agents}")
+        except Exception as e:
+            logger.error(f"Error loading agents: {e}", exc_info=True)
+    
+    # Start agent loading but don't wait
+    asyncio.create_task(load_agents_async())
+    
     yield
     # Shutdown
     logger.info("Shutting down Azure AI Foundry Agent Server...")
@@ -689,7 +720,9 @@ async def it_agent_chat(agent_name: str, request: ChatRequest):
             metadata=request.metadata,
         )
     except Exception as e:
-        logger.error(f"Error in IT agent chat: {e}")
+        if telemetry:
+            telemetry.record_error(str(e))
+        logger.error(f"Error in IT agent chat: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -771,9 +804,39 @@ async def deep_agent_chat(agent_name: str, request: ChatRequest):
         raise HTTPException(status_code=404, detail=f"DeepAgent '{agent_name}' not found")
 
     session_id = request.session_id or str(uuid.uuid4())
-
+    user_id = request.user_id or "anonymous"
+    
+    # Initialize telemetry if available
+    telemetry = None
+    if OBSERVABILITY_AVAILABLE:
+        telemetry = AgentTelemetry(
+            agent_name=f"deepagent_{agent_name}",
+            agent_type="DeepAgent"
+        )
+    
+    start_time = time.time()
+    
     try:
-        response = agent.chat(request.message, thread_id=session_id)
+        # Track execution with telemetry
+        if telemetry:
+            with telemetry.track_execution() as metrics:
+                metrics.custom_attributes.update({
+                    "agent_name": agent_name,
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "message_length": len(request.message),
+                })
+                response = agent.chat(request.message, thread_id=session_id)
+                metrics.custom_attributes["response_length"] = len(response)
+        else:
+            response = agent.chat(request.message, thread_id=session_id)
+        
+        duration_ms = (time.time() - start_time) * 1000
+        logger.info(
+            f"DeepAgent '{agent_name}' completed request in {duration_ms:.2f}ms "
+            f"(session: {session_id}, user: {user_id})"
+        )
+        
         return ChatResponse(
             response=response,
             session_id=session_id,
