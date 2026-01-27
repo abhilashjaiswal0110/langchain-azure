@@ -171,14 +171,79 @@ AZURE_AI_PROJECT_ENDPOINT="https://<resource>.services.ai.azure.com/api/projects
 # For authentication (if not using DefaultAzureCredential)
 AZURE_OPENAI_API_KEY="your-key"
 
-# For tracing
-APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=..."
+# For Azure Monitor Observability
+APPLICATIONSIGHTS_CONNECTION_STRING="InstrumentationKey=..."
+ENABLE_AZURE_MONITOR="true"  # Enabled by default
 
 # For LangSmith integration
 LANGCHAIN_API_KEY="your-langsmith-key"
 LANGCHAIN_TRACING_V2="true"
 LANGCHAIN_PROJECT="your-project-name"
+
+# Optional: Fine-tune observability
+ENABLE_REQUEST_LOGGING="true"
+ENABLE_TOKEN_TRACKING="true"
 ```
+
+### 4. Observability Configuration
+
+**Dual Observability Stack**: The server supports both Azure Monitor and LangSmith simultaneously.
+
+**Azure Monitor Setup**:
+1. Create Application Insights resource in Azure Portal
+2. Copy connection string
+3. Set `APPLICATIONINSIGHTS_CONNECTION_STRING` environment variable
+4. Server automatically enables OpenTelemetry instrumentation
+
+**Benefits**:
+- Request/response tracking with custom dimensions
+- Session and user ID tracking across conversations
+- Agent execution metrics (duration, token usage)
+- Exception tracking with full context
+- Live Metrics for real-time monitoring
+- KQL queries for advanced analytics
+
+**LangSmith Setup**:
+1. Sign up at https://smith.langchain.com
+2. Create a project
+3. Generate API key
+4. Set environment variables:
+   ```bash
+   LANGCHAIN_TRACING_V2=true
+   LANGCHAIN_API_KEY=your-key
+   LANGCHAIN_PROJECT=your-project
+   ```
+
+**Benefits**:
+- Full LangGraph execution traces
+- LLM input/output inspection
+- Tool invocation debugging
+- Dataset creation from traces
+- Evaluation and testing support
+
+**Session & User Tracking**:
+```python
+# All agent endpoints support session and user tracking
+response = agent.chat(
+    message="Help with deployment",
+    thread_id="session-abc-123",  # Session ID for continuity
+    user_id="user-john-doe",       # User ID for analytics
+    metadata={
+        "environment": "production",
+        "source": "slack-bot",
+        "priority": "high"
+    }
+)
+```
+
+**Tracked Metrics**:
+- `agent_name`: Which agent handled the request
+- `session_id`: Conversation tracking
+- `user_id`: User-scoped analytics
+- `message_length`: Input size
+- `response_length`: Output size
+- `duration_ms`: Execution time
+- Custom metadata fields
 
 ## Deployment to Azure AI Foundry
 
@@ -306,21 +371,45 @@ def my_custom_tool(query: str) -> str:
 - Descriptive names and descriptions
 - Handle errors gracefully
 
-### 3. Tracing and Observability
+### 3. Observability and Monitoring
+
+**Production-Ready Observability**: The server includes built-in observability features enabled by default.
+
 ```python
-# Enable comprehensive tracing
-from langchain_azure_ai.callbacks import AzureAIOpenTelemetryTracer
+# Observability is automatically enabled when environment variables are set
+# No code changes required!
 
-tracer = AzureAIOpenTelemetryTracer(
-    connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+# For custom telemetry in your agents:
+from langchain_azure_ai.observability import AgentTelemetry
+
+telemetry = AgentTelemetry(
+    agent_name="my-custom-agent",
+    agent_type="enterprise"
 )
 
-# Use with LangChain
-result = agent.invoke(
-    {"messages": messages},
-    config={"callbacks": [tracer]}
-)
+# Track execution with custom metrics
+with telemetry.track_execution() as metrics:
+    metrics.custom_attributes.update({
+        "query_type": "document_analysis",
+        "document_count": 5,
+        "complexity": "high"
+    })
+    result = agent.invoke(input)
+    metrics.custom_attributes["result_size"] = len(result)
+
+# Metrics are automatically sent to:
+# - Application Insights (if APPLICATIONINSIGHTS_CONNECTION_STRING is set)
+# - LangSmith (if LANGCHAIN_TRACING_V2=true)
 ```
+
+**Best Practices**:
+- Always set session_id for conversation continuity
+- Include user_id for user-scoped analytics and audit trails
+- Add meaningful metadata for filtering and analysis
+- Use consistent naming conventions for custom attributes
+- Monitor Live Metrics for real-time system health
+- Set up alerts for high error rates or slow responses
+- Regularly review session analytics for optimization opportunities
 
 ### 4. Security
 - **Never commit secrets**: Use `.env` files (add to `.gitignore`)

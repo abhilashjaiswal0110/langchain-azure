@@ -76,6 +76,59 @@ model.invoke(messages)
 AIMessage(content='Ciao!', additional_kwargs={}, response_metadata={'model': 'gpt-4o', 'token_usage': {'input_tokens': 20, 'output_tokens': 3, 'total_tokens': 23}, 'finish_reason': 'stop'}, id='run-0758e7ec-99cd-440b-bfa2-3a1078335133-0', usage_metadata={'input_tokens': 20, 'output_tokens': 3, 'total_tokens': 23})
 ```
 
+## 📊 Enterprise Observability
+
+Built-in production-ready observability with dual tracing support:
+
+### Azure Monitor Integration
+```python
+# Enable Azure Monitor OpenTelemetry tracing
+export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=..."
+export ENABLE_AZURE_MONITOR=true
+```
+
+**Features:**
+- Request/response tracking with custom dimensions
+- Session and user ID tracking
+- Agent execution duration metrics
+- Token usage monitoring
+- Exception tracking with full context
+- Live Metrics and Application Insights analytics
+
+### LangSmith Integration
+```python
+# Enable LangSmith tracing for LangChain agents
+export LANGCHAIN_TRACING_V2=true
+export LANGCHAIN_API_KEY="your-api-key"
+export LANGCHAIN_PROJECT="your-project"
+```
+
+**Features:**
+- Full LangGraph execution traces
+- LLM call inspection
+- Tool invocation tracking
+- Session continuity
+- Dataset creation and evaluation
+
+### Session & User Tracking
+```python
+# Track users and sessions across conversations
+response = agent.chat(
+    message="Hello",
+    thread_id="session-123",
+    user_id="user-456",
+    metadata={"environment": "production", "source": "web-app"}
+)
+```
+
+**Tracked Dimensions:**
+- `session_id`: Conversation continuity
+- `user_id`: User-scoped analytics
+- `agent_name`: Agent identification
+- `message_length`: Input metrics
+- `response_length`: Output metrics
+- Custom metadata fields
+
 ### Azure AI Chat Completions Model with DeepSeek-R1 
 
 ```python
@@ -406,7 +459,7 @@ For detailed information on how to contribute, see [LangChain contribution guide
 
 ---
 
-## 🔒 Security
+## � Security
 
 This repository follows enterprise security best practices:
 
