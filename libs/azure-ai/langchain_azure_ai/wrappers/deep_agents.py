@@ -406,7 +406,109 @@ Maintain compliance and candidate experience throughout the process.""",
 
 
 class ITOperationsWrapper(DeepAgentWrapper):
-    """Specialized wrapper for IT Operations DeepAgent."""
+    """Specialized wrapper for IT Operations DeepAgent.
+
+    A multi-agent system designed for enterprise IT infrastructure management
+    and operations automation. This agent coordinates specialized subagents
+    to handle:
+
+    - Infrastructure monitoring and health checks
+    - Incident detection and alerting
+    - Automated remediation and self-healing
+    - Capacity planning and resource optimization
+    - Change management and deployment coordination
+    - Security monitoring and compliance
+    - Performance analysis and optimization
+    - Log analysis and troubleshooting
+
+    The IT Operations DeepAgent follows ITIL best practices and integrates
+    with common IT management tools and platforms.
+
+    Example:
+        ```python
+        from langchain_azure_ai.wrappers import ITOperationsWrapper, SubAgentConfig
+
+        # Create with default configuration
+        it_ops = ITOperationsWrapper(
+            name="enterprise-it-ops",
+            model="gpt-4o-mini",
+        )
+
+        # Or with custom subagents for specific infrastructure
+        monitoring_agent = SubAgentConfig(
+            name="monitor",
+            instructions="Monitor infrastructure health...",
+            tools=[check_metrics, query_prometheus],
+        )
+
+        remediation_agent = SubAgentConfig(
+            name="remediate",
+            instructions="Execute automated fixes...",
+            tools=[restart_service, scale_resources],
+        )
+
+        it_ops = ITOperationsWrapper(
+            name="custom-it-ops",
+            sub_agents=[monitoring_agent, remediation_agent],
+        )
+
+        # Execute a workflow
+        response = it_ops.execute_workflow(
+            "Check all production servers and remediate any issues"
+        )
+        ```
+
+    Attributes:
+        agent_subtype: Always "it_operations" for this wrapper.
+        sub_agents: List of SubAgentConfig for specialized IT operations.
+    """
+
+    # Extended instructions for IT Operations
+    IT_OPS_INSTRUCTIONS = """You are an IT Operations Supervisor Agent managing enterprise infrastructure.
+
+## Your Responsibilities
+
+1. **Infrastructure Monitoring**
+   - Analyze system metrics, logs, and alerts
+   - Identify performance bottlenecks and anomalies
+   - Track service health and availability
+
+2. **Incident Management**
+   - Detect and classify incidents by severity
+   - Coordinate response across teams
+   - Document incidents and resolutions
+
+3. **Automated Remediation**
+   - Execute predefined runbooks for known issues
+   - Coordinate service restarts and failovers
+   - Scale resources based on demand
+
+4. **Change Management**
+   - Review and approve change requests
+   - Coordinate deployment windows
+   - Track change implementation and rollbacks
+
+5. **Capacity Planning**
+   - Analyze resource utilization trends
+   - Forecast future capacity needs
+   - Recommend optimization strategies
+
+## ITIL Alignment
+
+Follow ITIL practices for:
+- Incident Management
+- Problem Management
+- Change Management
+- Service Level Management
+
+## Escalation Protocol
+
+- P1 (Critical): Immediate escalation, all-hands response
+- P2 (High): 15-minute response, on-call engagement
+- P3 (Medium): 1-hour response, normal workflow
+- P4 (Low): Next business day, scheduled maintenance
+
+Always prioritize service availability and minimize mean time to recovery (MTTR)."""
 
     def __init__(
         self,
@@ -416,9 +518,24 @@ class ITOperationsWrapper(DeepAgentWrapper):
         tools: Optional[Sequence[Union[BaseTool, Callable]]] = None,
         **kwargs: Any,
     ):
+        """Initialize IT Operations DeepAgent wrapper.
+
+        Args:
+            name: Name of the IT Operations agent.
+            instructions: Custom supervisor instructions. If None, uses IT_OPS_INSTRUCTIONS.
+            sub_agents: List of sub-agent configurations for specialized tasks.
+            tools: List of tools for the supervisor agent.
+            **kwargs: Additional arguments passed to parent.
+        """
+        # Register extended instructions
+        if "it_operations" not in DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS:
+            DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS["it_operations"] = (
+                self.IT_OPS_INSTRUCTIONS
+            )
+
         super().__init__(
             name=name,
-            instructions=instructions,
+            instructions=instructions or self.IT_OPS_INSTRUCTIONS,
             agent_subtype="it_operations",
             sub_agents=sub_agents,
             tools=tools,
@@ -427,7 +544,111 @@ class ITOperationsWrapper(DeepAgentWrapper):
 
 
 class SalesIntelligenceWrapper(DeepAgentWrapper):
-    """Specialized wrapper for Sales Intelligence DeepAgent."""
+    """Specialized wrapper for Sales Intelligence DeepAgent.
+
+    A multi-agent system designed for sales analytics, intelligence gathering,
+    and revenue optimization. This agent coordinates specialized subagents
+    to handle:
+
+    - Lead scoring and qualification
+    - Sales pipeline analysis and forecasting
+    - Customer segmentation and targeting
+    - Competitive intelligence gathering
+    - Market trend analysis
+    - Deal risk assessment
+    - Revenue optimization recommendations
+    - Sales performance analytics
+
+    The Sales Intelligence DeepAgent integrates with CRM systems and provides
+    data-driven insights for sales strategy optimization.
+
+    Example:
+        ```python
+        from langchain_azure_ai.wrappers import SalesIntelligenceWrapper, SubAgentConfig
+
+        # Create with default configuration
+        sales_intel = SalesIntelligenceWrapper(
+            name="enterprise-sales-intel",
+            model="gpt-4o-mini",
+        )
+
+        # Or with custom subagents for specific sales processes
+        lead_scorer = SubAgentConfig(
+            name="lead-scoring",
+            instructions="Score and qualify leads based on engagement...",
+            tools=[analyze_engagement, check_firmographics],
+        )
+
+        forecaster = SubAgentConfig(
+            name="forecaster",
+            instructions="Generate sales forecasts...",
+            tools=[analyze_pipeline, predict_revenue],
+        )
+
+        sales_intel = SalesIntelligenceWrapper(
+            name="custom-sales-intel",
+            sub_agents=[lead_scorer, forecaster],
+        )
+
+        # Execute a workflow
+        response = sales_intel.execute_workflow(
+            "Analyze Q4 pipeline and identify at-risk deals"
+        )
+        ```
+
+    Attributes:
+        agent_subtype: Always "sales_intelligence" for this wrapper.
+        sub_agents: List of SubAgentConfig for specialized sales operations.
+    """
+
+    # Extended instructions for Sales Intelligence
+    SALES_INTEL_INSTRUCTIONS = """You are a Sales Intelligence Supervisor Agent for enterprise sales optimization.
+
+## Your Responsibilities
+
+1. **Lead Management**
+   - Score and qualify incoming leads
+   - Prioritize leads based on fit and intent signals
+   - Recommend optimal follow-up strategies
+
+2. **Pipeline Analysis**
+   - Analyze deal progression and velocity
+   - Identify bottlenecks in the sales funnel
+   - Flag at-risk opportunities
+
+3. **Forecasting**
+   - Generate revenue forecasts by segment/region
+   - Analyze forecast accuracy and adjust models
+   - Identify upside and downside risks
+
+4. **Competitive Intelligence**
+   - Track competitor activities and positioning
+   - Analyze win/loss patterns against competitors
+   - Provide battlecard recommendations
+
+5. **Customer Insights**
+   - Segment customers by value and behavior
+   - Identify expansion opportunities
+   - Predict churn risk
+
+## Sales Methodology Alignment
+
+Support common sales methodologies:
+- MEDDIC/MEDDPICC qualification
+- Challenger Sale approach
+- Solution Selling
+- SPIN Selling
+
+## Key Metrics Focus
+
+- Win Rate by segment
+- Average Deal Size
+- Sales Cycle Length
+- Pipeline Coverage Ratio
+- Customer Acquisition Cost (CAC)
+- Customer Lifetime Value (CLV)
+
+Always provide actionable insights backed by data analysis."""
 
     def __init__(
         self,
@@ -437,9 +658,24 @@ class SalesIntelligenceWrapper(DeepAgentWrapper):
         tools: Optional[Sequence[Union[BaseTool, Callable]]] = None,
         **kwargs: Any,
     ):
+        """Initialize Sales Intelligence DeepAgent wrapper.
+
+        Args:
+            name: Name of the Sales Intelligence agent.
+            instructions: Custom supervisor instructions. If None, uses SALES_INTEL_INSTRUCTIONS.
+            sub_agents: List of sub-agent configurations for specialized tasks.
+            tools: List of tools for the supervisor agent.
+            **kwargs: Additional arguments passed to parent.
+        """
+        # Register extended instructions
+        if "sales_intelligence" not in DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS:
+            DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS["sales_intelligence"] = (
+                self.SALES_INTEL_INSTRUCTIONS
+            )
+
         super().__init__(
             name=name,
-            instructions=instructions,
+            instructions=instructions or self.SALES_INTEL_INSTRUCTIONS,
             agent_subtype="sales_intelligence",
             sub_agents=sub_agents,
             tools=tools,
@@ -448,7 +684,122 @@ class SalesIntelligenceWrapper(DeepAgentWrapper):
 
 
 class RecruitmentWrapper(DeepAgentWrapper):
-    """Specialized wrapper for Recruitment DeepAgent."""
+    """Specialized wrapper for Recruitment DeepAgent.
+
+    A multi-agent system designed for end-to-end recruitment and talent
+    acquisition automation. This agent coordinates specialized subagents
+    to handle:
+
+    - Resume screening and parsing
+    - Candidate matching and ranking
+    - Interview scheduling and coordination
+    - Skill assessment and evaluation
+    - Background check orchestration
+    - Offer management and negotiation support
+    - Onboarding workflow initiation
+    - Diversity and inclusion analytics
+
+    The Recruitment DeepAgent integrates with ATS (Applicant Tracking Systems)
+    and ensures fair, compliant, and efficient hiring processes.
+
+    Example:
+        ```python
+        from langchain_azure_ai.wrappers import RecruitmentWrapper, SubAgentConfig
+
+        # Create with default configuration
+        recruiter = RecruitmentWrapper(
+            name="enterprise-recruiter",
+            model="gpt-4o-mini",
+        )
+
+        # Or with custom subagents for specific recruitment workflows
+        screener = SubAgentConfig(
+            name="screener",
+            instructions="Screen resumes against job requirements...",
+            tools=[parse_resume, match_skills],
+        )
+
+        scheduler = SubAgentConfig(
+            name="scheduler",
+            instructions="Coordinate interview schedules...",
+            tools=[check_availability, send_invite],
+        )
+
+        recruiter = RecruitmentWrapper(
+            name="custom-recruiter",
+            sub_agents=[screener, scheduler],
+        )
+
+        # Execute a workflow
+        response = recruiter.execute_workflow(
+            "Screen all applicants for Senior Engineer role and schedule top 5"
+        )
+        ```
+
+    Attributes:
+        agent_subtype: Always "recruitment" for this wrapper.
+        sub_agents: List of SubAgentConfig for specialized recruitment tasks.
+    """
+
+    # Extended instructions for Recruitment
+    RECRUITMENT_INSTRUCTIONS = """You are a Recruitment Supervisor Agent managing enterprise talent acquisition.
+
+## Your Responsibilities
+
+1. **Resume Screening**
+   - Parse and analyze candidate resumes
+   - Match candidates to job requirements
+   - Rank candidates by fit score
+
+2. **Candidate Evaluation**
+   - Assess technical and soft skills
+   - Coordinate skill assessments and tests
+   - Compile evaluation summaries
+
+3. **Interview Coordination**
+   - Schedule interviews across time zones
+   - Prepare interviewers with candidate briefs
+   - Collect and consolidate feedback
+
+4. **Pipeline Management**
+   - Track candidates through stages
+   - Identify bottlenecks and delays
+   - Maintain communication cadence
+
+5. **Compliance & Fairness**
+   - Ensure EEOC/diversity compliance
+   - Remove bias from screening processes
+   - Maintain audit trails
+
+## Recruitment Stages
+
+1. Sourcing & Application
+2. Initial Screening
+3. Phone/Video Screen
+4. Technical Assessment
+5. On-site/Panel Interview
+6. Reference Check
+7. Offer & Negotiation
+8. Onboarding
+
+## Key Metrics
+
+- Time to Fill
+- Cost per Hire
+- Quality of Hire
+- Offer Acceptance Rate
+- Candidate Experience Score
+- Source of Hire effectiveness
+- Diversity metrics by stage
+
+## Compliance Focus
+
+- Fair hiring practices (no discrimination)
+- Data privacy (GDPR, CCPA)
+- Background check regulations
+- Equal opportunity documentation
+
+Always prioritize candidate experience and maintain fair, unbiased evaluation."""
 
     def __init__(
         self,
@@ -458,9 +809,24 @@ class RecruitmentWrapper(DeepAgentWrapper):
         tools: Optional[Sequence[Union[BaseTool, Callable]]] = None,
         **kwargs: Any,
     ):
+        """Initialize Recruitment DeepAgent wrapper.
+
+        Args:
+            name: Name of the Recruitment agent.
+            instructions: Custom supervisor instructions. If None, uses RECRUITMENT_INSTRUCTIONS.
+            sub_agents: List of sub-agent configurations for specialized tasks.
+            tools: List of tools for the supervisor agent.
+            **kwargs: Additional arguments passed to parent.
+        """
+        # Register extended instructions
+        if "recruitment" not in DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS:
+            DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS["recruitment"] = (
+                self.RECRUITMENT_INSTRUCTIONS
+            )
+
         super().__init__(
             name=name,
-            instructions=instructions,
+            instructions=instructions or self.RECRUITMENT_INSTRUCTIONS,
             agent_subtype="recruitment",
             sub_agents=sub_agents,
             tools=tools,
