@@ -241,19 +241,22 @@ The `langchain-azure-ai` package includes enterprise-grade connectors for seamle
 Export your LangChain agents to Microsoft 365 Copilot:
 
 ```python
-from langchain_azure_ai.connectors import CopilotStudioConnector
+from langchain_azure_ai.connectors import CopilotStudioConnector, CopilotStudioConfig
 
-connector = CopilotStudioConnector()
+config = CopilotStudioConfig.from_env()  # or construct manually
+connector = CopilotStudioConnector(config)
 manifest = connector.export_agent(
-    agent=my_agent,
+    wrapper=my_agent,
     name="IT Helpdesk",
     description="Enterprise IT support agent"
 )
 
 # Create complete M365 Copilot plugin
 connector.create_m365_copilot_plugin(
-    agent=my_agent,
-    output_dir="copilot_plugin"
+    wrapper=my_agent,
+    name="IT Helpdesk",
+    description="Enterprise IT support agent",
+    api_base_url="https://your-api.example.com"
 )
 ```
 
@@ -262,11 +265,12 @@ connector.create_m365_copilot_plugin(
 Deploy your agent as a Teams bot:
 
 ```python
-from langchain_azure_ai.connectors import TeamsBotConnector
+from langchain_azure_ai.connectors import TeamsBotConnector, TeamsBotConfig
 from fastapi import FastAPI
 
 app = FastAPI()
-bot = TeamsBotConnector()
+config = TeamsBotConfig.from_env()  # or construct manually
+bot = TeamsBotConnector(config)
 bot.register_agent("helpdesk", helpdesk_agent)
 
 # Add Teams routes to FastAPI app
@@ -274,8 +278,7 @@ app.include_router(bot.create_fastapi_routes())
 
 # Generate Teams app manifest
 manifest = bot.generate_manifest(
-    name="IT Support Bot",
-    description="Enterprise helpdesk bot"
+    base_url="https://your-domain.com"
 )
 ```
 
@@ -284,16 +287,22 @@ manifest = bot.generate_manifest(
 Deploy your agents as serverless Azure Functions:
 
 ```python
-from langchain_azure_ai.connectors import AzureFunctionsDeployer
+from langchain_azure_ai.connectors import (
+    AzureFunctionsDeployer,
+    FunctionAppConfig,
+    ScalingConfig,
+)
 
-deployer = AzureFunctionsDeployer()
+config = FunctionAppConfig(
+    name="my-functions",
+    resource_group="my-rg",
+    scaling=ScalingConfig(min_instances=1, max_instances=10),
+)
+
+deployer = AzureFunctionsDeployer(config)
 deployer.generate_scaffold(
-    agents={"helpdesk": helpdesk_agent},
     output_dir="functions_app",
-    scaling_config={
-        "min_instances": 1,
-        "max_instances": 10
-    }
+    wrappers={"helpdesk": helpdesk_agent},
 )
 
 # Generates:

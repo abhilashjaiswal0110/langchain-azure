@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-01-29
+## [1.1.0] - 2026-01-29
 
 ### Added
 - **Phase 3: Enterprise Connectors Module** (`langchain_azure_ai.connectors`)
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive connector usage examples and best practices
 
 ### Changed
-- Version bump to 2.0.0 to reflect major enterprise features addition
+- Version bump to 1.1.0 to reflect new enterprise features (minor version bump)
 - Enhanced documentation structure for better discoverability
 - Improved code examples with real-world enterprise scenarios
 
