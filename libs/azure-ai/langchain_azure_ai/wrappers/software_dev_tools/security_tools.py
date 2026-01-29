@@ -357,7 +357,7 @@ def generate_security_report(
     - Compliance: Regulatory compliance focused
 
     Args:
-        scan_results: Previous scan results or code to scan.
+        scan_results: Previous scan results or code to scan (JSON format preferred).
         format_type: Report format - "summary", "detailed", "compliance".
         session_id: Session identifier.
 
@@ -372,6 +372,87 @@ def generate_security_report(
     except json.JSONDecodeError:
         results = {"issues": [], "total_issues": 0}
 
+    # Extract issues from various possible formats
+    issues = results.get("issues", [])
+    if not issues and "vulnerabilities" in results:
+        issues = results["vulnerabilities"]
+    if not issues and "findings" in results:
+        issues = results["findings"]
+
+    # Count findings by severity from actual data
+    critical_count = 0
+    high_count = 0
+    medium_count = 0
+    low_count = 0
+
+    # Also extract from issues_by_severity if available
+    if "issues_by_severity" in results:
+        severity_data = results["issues_by_severity"]
+        critical_count = severity_data.get("critical", 0)
+        high_count = severity_data.get("high", 0)
+        medium_count = severity_data.get("medium", 0)
+        low_count = severity_data.get("low", 0)
+    else:
+        # Count from individual issues
+        for issue in issues:
+            severity = issue.get("severity", "").lower()
+            if severity == "critical":
+                critical_count += 1
+            elif severity == "high":
+                high_count += 1
+            elif severity == "medium":
+                medium_count += 1
+            elif severity == "low":
+                low_count += 1
+
+    total_findings = results.get("total_issues", len(issues))
+    if total_findings == 0:
+        total_findings = critical_count + high_count + medium_count + low_count
+
+    # Determine risk level based on actual findings
+    if critical_count > 0:
+        risk_level = "critical"
+    elif high_count > 0:
+        risk_level = "high"
+    elif medium_count > 0:
+        risk_level = "medium"
+    elif low_count > 0:
+        risk_level = "low"
+    else:
+        risk_level = "none"
+
+    # Generate dynamic recommendations based on findings
+    recommendations = []
+    if critical_count > 0:
+        recommendations.append(f"URGENT: Address {critical_count} critical vulnerabilities immediately")
+    if high_count > 0:
+        recommendations.append(f"HIGH PRIORITY: Fix {high_count} high-severity issues within 24-48 hours")
+    if medium_count > 0:
+        recommendations.append(f"Plan remediation for {medium_count} medium-severity issues")
+    if low_count > 0:
+        recommendations.append(f"Review {low_count} low-severity findings during next sprint")
+
+    # Add general recommendations
+    if total_findings > 0:
+        recommendations.extend([
+            "Implement security training for development team",
+            "Add automated security scanning to CI/CD pipeline",
+            "Schedule regular security assessments",
+        ])
+    else:
+        recommendations.extend([
+            "Continue following security best practices",
+            "Maintain automated security scanning in CI/CD pipeline",
+            "Consider periodic penetration testing",
+        ])
+
+    # Extract OWASP categories found
+    owasp_categories_found = set()
+    for issue in issues:
+        owasp_id = issue.get("owasp_id", issue.get("category", ""))
+        if owasp_id and owasp_id.startswith("A"):
+            owasp_categories_found.add(owasp_id)
+
     report = {
         "id": report_id,
         "timestamp": datetime.now().isoformat(),
@@ -379,31 +460,65 @@ def generate_security_report(
         "format": format_type,
         "title": "Security Assessment Report",
         "summary": {
-            "risk_level": "medium",
-            "total_findings": results.get("total_issues", 0),
-            "critical_findings": 0,
-            "high_findings": 0,
+            "risk_level": risk_level,
+            "total_findings": total_findings,
+            "critical_findings": critical_count,
+            "high_findings": high_count,
+            "medium_findings": medium_count,
+            "low_findings": low_count,
         },
-        "recommendations": [
-            "Address all critical and high severity findings immediately",
-            "Implement security training for development team",
-            "Add automated security scanning to CI/CD pipeline",
-        ],
+        "recommendations": recommendations,
     }
 
     if format_type == "detailed":
-        report["detailed_findings"] = results.get("issues", [])
+        report["detailed_findings"] = issues
+        report["owasp_categories_affected"] = list(owasp_categories_found)
         report["remediation_steps"] = [
             "Review each finding and understand the risk",
             "Prioritize fixes based on severity and exposure",
             "Test fixes thoroughly before deployment",
+            "Verify remediation with follow-up scan",
         ]
+        # Group findings by category
+        findings_by_category = {}
+        for issue in issues:
+            category = issue.get("category", issue.get("owasp_id", "Other"))
+            if category not in findings_by_category:
+                findings_by_category[category] = []
+            findings_by_category[category].append(issue)
+        report["findings_by_category"] = findings_by_category
 
     if format_type == "compliance":
+        # Determine compliance status based on actual findings
+        owasp_status = "passed" if not owasp_categories_found else ("failed" if critical_count > 0 or high_count > 0 else "partial")
+
+        # Check for specific compliance-related issues using explicit OWASP IDs
+        has_auth_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") in ("A01", "A07")
+            for issue in issues
+        )
+        has_crypto_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") == "A02"
+            for issue in issues
+        )
+        has_injection_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") == "A03"
+            for issue in issues
+        )
+
+        pci_status = "failed" if (has_auth_issues or has_crypto_issues or has_injection_issues) else ("review_needed" if total_findings > 0 else "passed")
+        soc2_status = "failed" if critical_count > 0 else ("review_needed" if total_findings > 0 else "passed")
+
         report["compliance_status"] = {
-            "OWASP_Top_10": "partial",
-            "PCI_DSS": "review_needed",
-            "SOC2": "review_needed",
+            "OWASP_Top_10": owasp_status,
+            "owasp_categories_violated": list(owasp_categories_found),
+            "PCI_DSS": pci_status,
+            "SOC2": soc2_status,
+            "compliance_notes": {
+                "OWASP_Top_10": f"{len(owasp_categories_found)} categories with findings" if owasp_categories_found else "No OWASP violations detected",
+                "PCI_DSS": "Review authentication, encryption, and injection controls" if pci_status != "passed" else "Basic requirements met",
+                "SOC2": "Review security controls for SOC2 Type II audit" if soc2_status != "passed" else "Security controls appear adequate",
+            },
         }
 
     return json.dumps(report, indent=2)

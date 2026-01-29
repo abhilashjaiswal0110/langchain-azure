@@ -516,19 +516,36 @@ You coordinate the complete software development process by:
 8. Debugging and optimizing performance
 9. Generating technical documentation
 
-## Available Subagents
+## How to Handle Requests
 
-Use the `task` tool to delegate to specialized subagents:
+You have access to specialized tools for each phase of the SDLC. Based on the user's request, use the appropriate tools directly:
 
-- **requirements-intelligence**: Extract and validate software requirements
-- **architecture-design**: Design system architecture and APIs
-- **code-generator**: Generate production-ready code
-- **code-reviewer**: Perform automated code reviews
-- **testing-automation**: Create and run tests
-- **debugging-optimization**: Debug issues and optimize performance
-- **security-compliance**: Scan for vulnerabilities and compliance
-- **devops-integration**: Create CI/CD pipelines and deployment configs
-- **documentation**: Generate technical documentation
+**Requirements Phase Tools:**
+- analyze_requirements, extract_user_stories, validate_requirements, prioritize_requirements, detect_ambiguities, generate_acceptance_criteria
+
+**Architecture Phase Tools:**
+- design_architecture, create_api_spec, suggest_tech_stack, design_data_model, create_component_diagram, analyze_dependencies
+
+**Code Generation Tools:**
+- generate_code, refactor_code, apply_design_pattern, generate_boilerplate, optimize_imports, format_code
+
+**Code Review Tools:**
+- review_code, check_code_style, analyze_complexity, detect_code_smells, suggest_improvements, check_best_practices
+
+**Testing Tools:**
+- generate_unit_tests, generate_integration_tests, analyze_test_coverage, run_tests, generate_test_data, create_test_plan
+
+**Security Tools:**
+- scan_security_issues, check_owasp_compliance, detect_secrets, analyze_dependencies_security, generate_security_report, suggest_security_fixes
+
+**DevOps Tools:**
+- create_ci_pipeline, create_cd_pipeline, configure_deployment, generate_dockerfile, create_kubernetes_config, setup_monitoring
+
+**Debugging Tools:**
+- analyze_error, trace_execution, identify_root_cause, propose_fix, analyze_performance, detect_memory_issues
+
+**Documentation Tools:**
+- generate_api_docs, create_readme, document_architecture, generate_changelog, add_inline_comments, create_user_guide
 
 ## SDLC Phases
 
@@ -611,37 +628,123 @@ All generated code must:
 - Be security-conscious
 """
 
-    # Default subagent configurations for software development
-    DEFAULT_SOFTWARE_DEV_SUBAGENTS = [
-        SubAgentConfig(
-            name="requirements-intelligence",
-            instructions="""You are a Requirements Intelligence Agent specialized in software requirements analysis.
+    @staticmethod
+    def _get_default_subagents():
+        """Get default subagent configurations with tools wired.
+
+        This method is called lazily to avoid import issues.
+        """
+        # Import tools here to avoid circular imports
+        from langchain_azure_ai.wrappers.software_dev_tools import (
+            # Requirements tools
+            analyze_requirements,
+            extract_user_stories,
+            validate_requirements,
+            prioritize_requirements,
+            detect_ambiguities,
+            generate_acceptance_criteria,
+            # Architecture tools
+            design_architecture,
+            create_api_spec,
+            suggest_tech_stack,
+            design_data_model,
+            create_component_diagram,
+            analyze_dependencies,
+            # Code generation tools
+            generate_code,
+            refactor_code,
+            apply_design_pattern,
+            generate_boilerplate,
+            optimize_imports,
+            format_code,
+            # Code review tools
+            review_code,
+            check_code_style,
+            analyze_complexity,
+            detect_code_smells,
+            suggest_improvements,
+            check_best_practices,
+            # Testing tools
+            generate_unit_tests,
+            generate_integration_tests,
+            analyze_test_coverage,
+            run_tests,
+            generate_test_data,
+            create_test_plan,
+            # Security tools
+            scan_security_issues,
+            check_owasp_compliance,
+            detect_secrets,
+            analyze_dependencies_security,
+            generate_security_report,
+            suggest_security_fixes,
+            # DevOps tools
+            create_ci_pipeline,
+            create_cd_pipeline,
+            configure_deployment,
+            generate_dockerfile,
+            create_kubernetes_config,
+            setup_monitoring,
+            # Debugging tools
+            analyze_error,
+            trace_execution,
+            identify_root_cause,
+            propose_fix,
+            analyze_performance,
+            detect_memory_issues,
+            # Documentation tools
+            generate_api_docs,
+            create_readme,
+            document_architecture,
+            generate_changelog,
+            add_inline_comments,
+            create_user_guide,
+        )
+
+        return [
+            SubAgentConfig(
+                name="requirements-intelligence",
+                instructions="""You are a Requirements Intelligence Agent specialized in software requirements analysis.
 Your responsibilities:
 1. Analyze natural language requirements and extract structured requirements
 2. Convert requirements into well-formed user stories
 3. Detect ambiguities and risks in requirements
 4. Generate comprehensive acceptance criteria
-5. Prioritize requirements using MoSCoW or weighted scoring
+5. Prioritize requirements using MoSCoW, weighted scoring, or Kano model
 
 Ensure requirements are SMART (Specific, Measurable, Achievable, Relevant, Time-bound).""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="architecture-design",
-            instructions="""You are an Architecture & Design Agent specialized in software system design.
+                tools=[
+                    analyze_requirements,
+                    extract_user_stories,
+                    validate_requirements,
+                    prioritize_requirements,
+                    detect_ambiguities,
+                    generate_acceptance_criteria,
+                ],
+            ),
+            SubAgentConfig(
+                name="architecture-design",
+                instructions="""You are an Architecture & Design Agent specialized in software system design.
 Your responsibilities:
 1. Design scalable, maintainable system architectures
-2. Create clear API specifications (REST, GraphQL)
+2. Create clear API specifications (REST, GraphQL, gRPC)
 3. Suggest appropriate technology stacks
 4. Design data models and database schemas
 5. Create component diagrams and documentation
 
 Follow SOLID principles and design for scalability and resilience.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="code-generator",
-            instructions="""You are a Code Generation Agent specialized in writing production-ready code.
+                tools=[
+                    design_architecture,
+                    create_api_spec,
+                    suggest_tech_stack,
+                    design_data_model,
+                    create_component_diagram,
+                    analyze_dependencies,
+                ],
+            ),
+            SubAgentConfig(
+                name="code-generator",
+                instructions="""You are a Code Generation Agent specialized in writing production-ready code.
 Your responsibilities:
 1. Generate clean, maintainable code
 2. Apply appropriate design patterns
@@ -650,11 +753,18 @@ Your responsibilities:
 5. Add type hints and documentation
 
 Write self-documenting code with clear naming and keep functions small and focused.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="code-reviewer",
-            instructions="""You are a Code Review & Quality Agent specialized in ensuring code excellence.
+                tools=[
+                    generate_code,
+                    refactor_code,
+                    apply_design_pattern,
+                    generate_boilerplate,
+                    optimize_imports,
+                    format_code,
+                ],
+            ),
+            SubAgentConfig(
+                name="code-reviewer",
+                instructions="""You are a Code Review & Quality Agent specialized in ensuring code excellence.
 Your responsibilities:
 1. Perform comprehensive code reviews
 2. Check adherence to style guidelines
@@ -663,24 +773,38 @@ Your responsibilities:
 5. Suggest improvements and refactoring
 
 Provide specific, actionable feedback with concrete examples.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="testing-automation",
-            instructions="""You are a Testing Automation Agent specialized in quality assurance.
+                tools=[
+                    review_code,
+                    check_code_style,
+                    analyze_complexity,
+                    detect_code_smells,
+                    suggest_improvements,
+                    check_best_practices,
+                ],
+            ),
+            SubAgentConfig(
+                name="testing-automation",
+                instructions="""You are a Testing Automation Agent specialized in quality assurance.
 Your responsibilities:
-1. Generate comprehensive unit tests
+1. Generate comprehensive unit tests (pytest, unittest, jest, mocha)
 2. Create integration and E2E tests
 3. Analyze and improve test coverage
 4. Generate test data and fixtures
 5. Create test plans and strategies
 
 Follow Arrange-Act-Assert pattern and test edge cases thoroughly.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="debugging-optimization",
-            instructions="""You are a Debugging & Optimization Agent specialized in problem solving.
+                tools=[
+                    generate_unit_tests,
+                    generate_integration_tests,
+                    analyze_test_coverage,
+                    run_tests,
+                    generate_test_data,
+                    create_test_plan,
+                ],
+            ),
+            SubAgentConfig(
+                name="debugging-optimization",
+                instructions="""You are a Debugging & Optimization Agent specialized in problem solving.
 Your responsibilities:
 1. Analyze errors and exceptions
 2. Trace code execution paths
@@ -689,11 +813,18 @@ Your responsibilities:
 5. Optimize performance and memory usage
 
 Use the 5 Whys technique for root cause analysis.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="security-compliance",
-            instructions="""You are a Security & Compliance Agent specialized in application security.
+                tools=[
+                    analyze_error,
+                    trace_execution,
+                    identify_root_cause,
+                    propose_fix,
+                    analyze_performance,
+                    detect_memory_issues,
+                ],
+            ),
+            SubAgentConfig(
+                name="security-compliance",
+                instructions="""You are a Security & Compliance Agent specialized in application security.
 Your responsibilities:
 1. Scan code for security vulnerabilities
 2. Check OWASP Top 10 compliance
@@ -702,24 +833,38 @@ Your responsibilities:
 5. Generate security reports and recommendations
 
 Focus on injection flaws, authentication issues, and sensitive data exposure.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="devops-integration",
-            instructions="""You are a DevOps Integration Agent specialized in deployment automation.
+                tools=[
+                    scan_security_issues,
+                    check_owasp_compliance,
+                    detect_secrets,
+                    analyze_dependencies_security,
+                    generate_security_report,
+                    suggest_security_fixes,
+                ],
+            ),
+            SubAgentConfig(
+                name="devops-integration",
+                instructions="""You are a DevOps Integration Agent specialized in deployment automation.
 Your responsibilities:
 1. Create CI/CD pipeline configurations
 2. Generate Docker and container configurations
-3. Create Kubernetes deployment manifests
+3. Create Kubernetes deployment manifests (with ConfigMap and HPA)
 4. Set up monitoring and observability
 5. Configure deployment environments
 
 Follow Infrastructure as Code principles and implement proper secrets management.""",
-            tools=[],
-        ),
-        SubAgentConfig(
-            name="documentation",
-            instructions="""You are a Documentation Agent specialized in technical writing.
+                tools=[
+                    create_ci_pipeline,
+                    create_cd_pipeline,
+                    configure_deployment,
+                    generate_dockerfile,
+                    create_kubernetes_config,
+                    setup_monitoring,
+                ],
+            ),
+            SubAgentConfig(
+                name="documentation",
+                instructions="""You are a Documentation Agent specialized in technical writing.
 Your responsibilities:
 1. Generate API documentation
 2. Create comprehensive README files
@@ -728,9 +873,19 @@ Your responsibilities:
 5. Write user guides and tutorials
 
 Use clear, concise language and include code examples that work.""",
-            tools=[],
-        ),
-    ]
+                tools=[
+                    generate_api_docs,
+                    create_readme,
+                    document_architecture,
+                    generate_changelog,
+                    add_inline_comments,
+                    create_user_guide,
+                ],
+            ),
+        ]
+
+    # Keep for backwards compatibility - will be populated by _get_default_subagents()
+    DEFAULT_SOFTWARE_DEV_SUBAGENTS: List[SubAgentConfig] = []
 
     def __init__(
         self,
@@ -755,9 +910,9 @@ Use clear, concise language and include code examples that work.""",
                 self.SOFTWARE_DEV_INSTRUCTIONS
             )
 
-        # Use default subagents if none provided
+        # Use default subagents if none provided (with tools wired)
         if sub_agents is None:
-            sub_agents = self.DEFAULT_SOFTWARE_DEV_SUBAGENTS.copy()
+            sub_agents = self._get_default_subagents()
 
         super().__init__(
             name=name,

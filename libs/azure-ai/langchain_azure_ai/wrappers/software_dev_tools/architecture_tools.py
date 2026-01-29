@@ -68,12 +68,39 @@ def design_architecture(
 
     config = patterns_config.get(pattern, patterns_config["microservices"])
 
+    # Parse and apply constraints to the architecture
+    parsed_constraints = []
+    constraint_adjustments = {}
+    if constraints:
+        # Parse constraints (can be JSON or comma-separated)
+        try:
+            parsed_constraints = json.loads(constraints)
+            if isinstance(parsed_constraints, dict):
+                parsed_constraints = list(parsed_constraints.values())
+        except json.JSONDecodeError:
+            parsed_constraints = [c.strip() for c in constraints.split(",") if c.strip()]
+
+        # Apply constraints to adjust architecture recommendations
+        for constraint in parsed_constraints:
+            constraint_lower = constraint.lower() if isinstance(constraint, str) else str(constraint).lower()
+            if "budget" in constraint_lower or "cost" in constraint_lower:
+                constraint_adjustments["cost_optimization"] = True
+            if "latency" in constraint_lower or "performance" in constraint_lower:
+                constraint_adjustments["performance_focus"] = True
+            if "compliance" in constraint_lower or "gdpr" in constraint_lower or "hipaa" in constraint_lower:
+                constraint_adjustments["compliance_requirements"] = constraint
+            if "legacy" in constraint_lower or "existing" in constraint_lower:
+                constraint_adjustments["legacy_integration"] = True
+            if "scale" in constraint_lower or "traffic" in constraint_lower:
+                constraint_adjustments["scalability_priority"] = True
+
     architecture = {
         "id": arch_id,
         "timestamp": datetime.now().isoformat(),
         "session_id": session_id,
         "pattern": pattern,
         "requirements_summary": requirements[:300],
+        "constraints_applied": parsed_constraints,
         "design": {
             "core_components": config["components"],
             "communication_pattern": config["communication"],
@@ -91,6 +118,25 @@ def design_architecture(
             "Add health check endpoints for all services",
         ],
     }
+
+    # Adjust recommendations based on constraints
+    if constraint_adjustments.get("cost_optimization"):
+        architecture["recommendations"].append("Consider serverless for cost efficiency on variable workloads")
+        architecture["design"]["cost_considerations"] = "Optimize for cost efficiency"
+    if constraint_adjustments.get("performance_focus"):
+        architecture["recommendations"].append("Implement caching layer for frequently accessed data")
+        architecture["recommendations"].append("Consider read replicas for database scaling")
+        architecture["design"]["performance_optimizations"] = ["Caching", "Connection pooling", "Async processing"]
+    if constraint_adjustments.get("compliance_requirements"):
+        architecture["recommendations"].append("Implement data encryption at rest and in transit")
+        architecture["recommendations"].append("Add audit logging for compliance tracking")
+        architecture["design"]["compliance"] = constraint_adjustments["compliance_requirements"]
+    if constraint_adjustments.get("legacy_integration"):
+        architecture["recommendations"].append("Use adapter pattern for legacy system integration")
+        architecture["design"]["integration_patterns"] = ["Anti-corruption layer", "Adapter pattern"]
+    if constraint_adjustments.get("scalability_priority"):
+        architecture["recommendations"].append("Implement horizontal scaling with load balancing")
+        architecture["design"]["scaling_strategy"] = "Horizontal with auto-scaling"
 
     return json.dumps(architecture, indent=2)
 
@@ -164,6 +210,124 @@ def create_api_spec(
             spec["graphql_schema"]["types"].append(f"type {resource} {{ id: ID!, name: String }}")
             spec["graphql_schema"]["queries"].append(f"{resource.lower()}s: [{resource}]")
             spec["graphql_schema"]["mutations"].append(f"create{resource}(name: String!): {resource}")
+
+    elif spec_format == "grpc":
+        # Generate gRPC protobuf specification
+        proto_messages = []
+        proto_services = []
+
+        for resource in resource_list:
+            resource_lower = resource.lower()
+            resource_pascal = resource.replace(" ", "")
+
+            # Generate message definitions
+            proto_messages.append({
+                "name": resource_pascal,
+                "fields": [
+                    {"name": "id", "type": "string", "number": 1},
+                    {"name": "name", "type": "string", "number": 2},
+                    {"name": "created_at", "type": "google.protobuf.Timestamp", "number": 3},
+                    {"name": "updated_at", "type": "google.protobuf.Timestamp", "number": 4},
+                ],
+            })
+            proto_messages.append({
+                "name": f"Create{resource_pascal}Request",
+                "fields": [
+                    {"name": "name", "type": "string", "number": 1},
+                ],
+            })
+            proto_messages.append({
+                "name": f"Get{resource_pascal}Request",
+                "fields": [
+                    {"name": "id", "type": "string", "number": 1},
+                ],
+            })
+            proto_messages.append({
+                "name": f"List{resource_pascal}sRequest",
+                "fields": [
+                    {"name": "page_size", "type": "int32", "number": 1},
+                    {"name": "page_token", "type": "string", "number": 2},
+                ],
+            })
+            proto_messages.append({
+                "name": f"List{resource_pascal}sResponse",
+                "fields": [
+                    {"name": f"{resource_lower}s", "type": f"repeated {resource_pascal}", "number": 1},
+                    {"name": "next_page_token", "type": "string", "number": 2},
+                ],
+            })
+            proto_messages.append({
+                "name": f"Delete{resource_pascal}Request",
+                "fields": [
+                    {"name": "id", "type": "string", "number": 1},
+                ],
+            })
+
+            # Generate service definition
+            proto_services.append({
+                "name": f"{resource_pascal}Service",
+                "methods": [
+                    {
+                        "name": f"Create{resource_pascal}",
+                        "input": f"Create{resource_pascal}Request",
+                        "output": resource_pascal,
+                    },
+                    {
+                        "name": f"Get{resource_pascal}",
+                        "input": f"Get{resource_pascal}Request",
+                        "output": resource_pascal,
+                    },
+                    {
+                        "name": f"List{resource_pascal}s",
+                        "input": f"List{resource_pascal}sRequest",
+                        "output": f"List{resource_pascal}sResponse",
+                    },
+                    {
+                        "name": f"Update{resource_pascal}",
+                        "input": resource_pascal,
+                        "output": resource_pascal,
+                    },
+                    {
+                        "name": f"Delete{resource_pascal}",
+                        "input": f"Delete{resource_pascal}Request",
+                        "output": "google.protobuf.Empty",
+                    },
+                ],
+            })
+
+        # Generate proto file content
+        proto_content_lines = [
+            'syntax = "proto3";',
+            f"package {api_name.lower().replace(' ', '_').replace('-', '_')};",
+            "",
+            'import "google/protobuf/timestamp.proto";',
+            'import "google/protobuf/empty.proto";',
+            "",
+        ]
+
+        for msg in proto_messages:
+            proto_content_lines.append(f"message {msg['name']} {{")
+            for field in msg["fields"]:
+                proto_content_lines.append(f"  {field['type']} {field['name']} = {field['number']};")
+            proto_content_lines.append("}")
+            proto_content_lines.append("")
+
+        for svc in proto_services:
+            proto_content_lines.append(f"service {svc['name']} {{")
+            for method in svc["methods"]:
+                proto_content_lines.append(
+                    f"  rpc {method['name']}({method['input']}) returns ({method['output']});"
+                )
+            proto_content_lines.append("}")
+            proto_content_lines.append("")
+
+        spec["grpc_spec"] = {
+            "proto_version": "proto3",
+            "package": api_name.lower().replace(" ", "_").replace("-", "_"),
+            "messages": proto_messages,
+            "services": proto_services,
+            "proto_file_content": "\n".join(proto_content_lines),
+        }
 
     return json.dumps(spec, indent=2)
 
