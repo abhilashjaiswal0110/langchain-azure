@@ -133,4 +133,4 @@ desktop.ini
 node_modules/
 
 # Playwright MCP (browser automation)
-playwright-mcp/
+.playwright-mcp/
