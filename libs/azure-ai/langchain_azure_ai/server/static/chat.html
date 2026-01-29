@@ -857,6 +857,11 @@
                                         <p>Resume screening, interview questions, candidate evaluation</p>
                                         <span class="agent-badge">DeepAgent</span>
                                     </div>
+                                    <div class="agent-card deep" onclick="startSession('software_development', 'deep')">
+                                        <h4>Software Development</h4>
+                                        <p>Full SDLC: requirements, code generation, testing, security, DevOps</p>
+                                        <span class="agent-badge">DeepAgent</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -938,7 +943,7 @@
         const quickActions = document.getElementById('quickActions');
 
         // Agents that support file upload
-        const uploadAgents = ['rag', 'data_analyst', 'document_intelligence', 'it_operations', 'sales_intelligence', 'recruitment'];
+        const uploadAgents = ['rag', 'data_analyst', 'document_intelligence', 'it_operations', 'sales_intelligence', 'recruitment', 'software_development'];
 
         // Quick actions for each agent type
         const agentQuickActions = {
@@ -953,7 +958,8 @@
             'rag': ['Search documents', 'Summarize content', 'Answer questions'],
             'it_operations': ['Diagnose incident', 'Analyze change risk', 'Find root cause', 'Check SLA status'],
             'sales_intelligence': ['Qualify deal (BANT)', 'Analyze RFP', 'Research competitor', 'Calculate win probability'],
-            'recruitment': ['Screen resumes', 'Generate interview questions', 'Evaluate candidate', 'Create shortlist']
+            'recruitment': ['Screen resumes', 'Generate interview questions', 'Evaluate candidate', 'Create shortlist'],
+            'software_development': ['Analyze requirements', 'Design architecture', 'Generate code', 'Review code', 'Create tests', 'Security scan', 'Create CI/CD pipeline', 'Document API']
         };
 
         // Welcome messages
@@ -969,7 +975,8 @@
             'rag': 'Welcome! I\'m your Multilingual RAG Agent. Click 📎 to upload documents, then ask me questions in any language.',
             'it_operations': 'Hello! I\'m your IT Operations Deep Agent. I coordinate multiple subagents to handle complex IT tasks including incident analysis, change management, and problem investigation. What can I help you with?',
             'sales_intelligence': 'Welcome! I\'m your Sales Intelligence Deep Agent. I can help with deal qualification, RFP analysis, competitive intelligence, and win probability assessment. What sales challenge can I help you with?',
-            'recruitment': 'Hello! I\'m your Recruitment Deep Agent. I can screen resumes, generate interview questions, evaluate candidates, and create reports. How can I assist with your hiring process?'
+            'recruitment': 'Hello! I\'m your Recruitment Deep Agent. I can screen resumes, generate interview questions, evaluate candidates, and create reports. How can I assist with your hiring process?',
+            'software_development': 'Hello! I\'m your Software Development Deep Agent. I coordinate the complete SDLC including requirements analysis, architecture design, code generation, testing, security scanning, CI/CD pipelines, and documentation. What would you like me to help you build?'
         };
 
         // Subagent configurations
@@ -995,6 +1002,17 @@
                 { name: 'Question Generator', color: '#fef3c7', textColor: '#92400e' },
                 { name: 'Answer Evaluator', color: '#fce7f3', textColor: '#9d174d' },
                 { name: 'Report Generator', color: '#f3e8ff', textColor: '#7c3aed' }
+            ],
+            'software_development': [
+                { name: 'Requirements', color: '#dcfce7', textColor: '#166534' },
+                { name: 'Architecture', color: '#dbeafe', textColor: '#1e40af' },
+                { name: 'Code Generator', color: '#fef3c7', textColor: '#92400e' },
+                { name: 'Code Reviewer', color: '#fce7f3', textColor: '#9d174d' },
+                { name: 'Testing', color: '#e0e7ff', textColor: '#3730a3' },
+                { name: 'Security', color: '#fee2e2', textColor: '#991b1b' },
+                { name: 'DevOps', color: '#f3e8ff', textColor: '#7c3aed' },
+                { name: 'Debugging', color: '#fef9c3', textColor: '#854d0e' },
+                { name: 'Documentation', color: '#f0fdf4', textColor: '#166534' }
             ]
         };
 

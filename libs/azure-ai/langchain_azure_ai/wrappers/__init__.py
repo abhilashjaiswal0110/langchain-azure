@@ -64,6 +64,7 @@ from langchain_azure_ai.wrappers.deep_agents import (
     ITOperationsWrapper,
     SalesIntelligenceWrapper,
     RecruitmentWrapper,
+    SoftwareDevelopmentWrapper,
 )
 
 __all__ = [
@@ -92,4 +93,5 @@ __all__ = [
     "ITOperationsWrapper",
     "SalesIntelligenceWrapper",
     "RecruitmentWrapper",
+    "SoftwareDevelopmentWrapper",
 ]
