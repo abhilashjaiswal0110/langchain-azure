@@ -312,9 +312,6 @@ def generate_dockerfile(
     # Determine the actual base image to use
     actual_base_image = base_image or default_base_images.get(project_type, "python:3.11-slim")
 
-    # Extract image family for multi-stage builds (e.g., "python:3.12-slim" -> "python")
-    image_family = actual_base_image.split(":")[0].split("/")[-1]
-
     # Generate Dockerfile based on project type with custom base image support
     if project_type == "python-api":
         # For Python, use the custom base image if provided
@@ -582,8 +579,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: {service_name}
-  minReplicas: {max(1, replicas // 2)}
-  maxReplicas: {replicas * 3}
+  minReplicas: {max(1, min(replicas, 100) // 2)}
+  maxReplicas: {min(replicas, 100) * 3}
   metrics:
   - type: Resource
     resource:

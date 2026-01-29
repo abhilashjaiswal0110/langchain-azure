@@ -161,7 +161,11 @@ def validate_requirements(
                     custom_rules[rule] = True
 
     # Default SMART validation checks
-    min_length = custom_rules.get("min_length", 50)
+    raw_min_length = custom_rules.get("min_length", 50)
+    try:
+        min_length = int(raw_min_length)
+    except (TypeError, ValueError):
+        min_length = 50
     checks = {
         "specific": {
             "passed": len(requirements) > min_length,
@@ -239,11 +243,31 @@ def validate_requirements(
 
     # Check max length if specified
     if "max_length" in custom_rules:
-        max_len = int(custom_rules["max_length"])
-        custom_check_results["max_length"] = {
-            "passed": len(requirements) <= max_len,
-            "message": f"Within length limit ({len(requirements)}/{max_len})" if len(requirements) <= max_len else f"Exceeds max length ({len(requirements)}/{max_len})",
-        }
+        raw_max_len = custom_rules["max_length"]
+        max_len = None
+        if isinstance(raw_max_len, str):
+            normalized = raw_max_len.replace(",", "").strip()
+            try:
+                max_len = int(normalized)
+            except ValueError:
+                custom_check_results["max_length"] = {
+                    "passed": False,
+                    "message": f"Invalid max_length value: {raw_max_len!r}",
+                }
+        else:
+            try:
+                max_len = int(raw_max_len)
+            except (TypeError, ValueError):
+                custom_check_results["max_length"] = {
+                    "passed": False,
+                    "message": f"Invalid max_length value: {raw_max_len!r}",
+                }
+
+        if max_len is not None:
+            custom_check_results["max_length"] = {
+                "passed": len(requirements) <= max_len,
+                "message": f"Within length limit ({len(requirements)}/{max_len})" if len(requirements) <= max_len else f"Exceeds max length ({len(requirements)}/{max_len})",
+            }
 
     # Combine default and custom checks
     all_checks = {**checks, **custom_check_results}

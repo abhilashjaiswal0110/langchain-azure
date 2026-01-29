@@ -164,7 +164,6 @@ describe("Module Tests", () => {{
 
 '''
         for test in tests:
-            test_name_camel = test["test_name"].replace("_", " ").title().replace(" ", "")
             test_template += f'''
     test("{test["test_name"].replace("_", " ")}", () => {{
         // {test["description"]}
@@ -435,7 +434,13 @@ def analyze_test_coverage(
         recommendations.append(f"Improve branch coverage from {branch_coverage:.1f}% to at least 70%")
     if function_coverage < 90:
         recommendations.append(f"Add tests for uncovered functions (currently {function_coverage:.1f}%)")
-    if uncovered_areas:
+    # Only add if there are real uncovered areas (not just parse failure placeholder)
+    has_real_uncovered_areas = any(
+        area.get("file") != "unknown"
+        or area.get("reason") != "Could not parse coverage data from input"
+        for area in uncovered_areas
+    )
+    if has_real_uncovered_areas:
         recommendations.append("Add tests for error handling paths")
         recommendations.append("Cover edge cases in input validation")
     if not recommendations:
@@ -557,7 +562,7 @@ def generate_test_data(
     properties = schema_dict.get("properties", {"name": {"type": "string"}})
 
     # Helper functions for data generation
-    def generate_realistic_value(field_name: str, field_type: str, index: int) -> any:
+    def generate_realistic_value(field_name: str, field_type: str, index: int):
         """Generate realistic test data based on field name and type."""
         field_lower = field_name.lower()
         if "email" in field_lower:
@@ -587,8 +592,13 @@ def generate_test_data(
         else:
             return f"value_{index+1}"
 
-    def generate_edge_case_value(field_name: str, field_type: str, index: int) -> any:
-        """Generate edge case test data."""
+    def generate_edge_case_value(field_name: str, field_type: str, index: int):
+        """Generate edge case test data.
+        
+        **WARNING**: This generates potentially dangerous strings like SQL injection
+        and XSS payloads FOR TESTING PURPOSES ONLY. Never use with actual database
+        connections or render in production without proper sanitization.
+        """
         edge_cases = [
             "",  # Empty string
             None,  # Null value
@@ -603,7 +613,7 @@ def generate_test_data(
         ]
         return edge_cases[index % len(edge_cases)]
 
-    def generate_random_value(field_name: str, field_type: str, index: int) -> any:
+    def generate_random_value(field_name: str, field_type: str, index: int):
         """Generate random test data."""
         if field_type == "integer" or field_type == "number":
             return random.randint(-1000, 1000)
@@ -612,6 +622,12 @@ def generate_test_data(
         else:
             length = random.randint(1, 50)
             return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+    # Validate and constrain count to a safe, documented range (1-100)
+    if not isinstance(count, int) or count < 1:
+        count = 1
+    elif count > 100:
+        count = 100
 
     # Generate the requested number of records (honor count parameter)
     test_data = []

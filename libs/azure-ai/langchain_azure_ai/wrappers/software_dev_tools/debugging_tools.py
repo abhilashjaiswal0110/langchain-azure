@@ -189,16 +189,14 @@ def trace_execution(
         for line in lines:
             if not line.strip():  # Skip empty lines
                 continue
-            # Count leading spaces/tabs
-            stripped = line.lstrip()
+            # Normalize indentation by expanding tabs to spaces
+            expanded_line = line.expandtabs(4)
+            stripped = expanded_line.lstrip()
             if not stripped:
                 continue
-            leading_whitespace = len(line) - len(stripped)
-            # Assume 4 spaces or 1 tab per indentation level
-            if "\t" in line[:leading_whitespace]:
-                depth = line[:leading_whitespace].count("\t")
-            else:
-                depth = leading_whitespace // 4
+            leading_whitespace = len(expanded_line) - len(stripped)
+            # Assume 4 spaces per indentation level
+            depth = leading_whitespace // 4
             max_depth = max(max_depth, depth)
         return max_depth
 

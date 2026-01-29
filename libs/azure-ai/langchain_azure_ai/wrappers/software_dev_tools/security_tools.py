@@ -492,10 +492,19 @@ def generate_security_report(
         # Determine compliance status based on actual findings
         owasp_status = "passed" if not owasp_categories_found else ("failed" if critical_count > 0 or high_count > 0 else "partial")
 
-        # Check for specific compliance-related issues
-        has_auth_issues = any("A01" in str(issue) or "A07" in str(issue) for issue in issues)
-        has_crypto_issues = any("A02" in str(issue) for issue in issues)
-        has_injection_issues = any("A03" in str(issue) for issue in issues)
+        # Check for specific compliance-related issues using explicit OWASP IDs
+        has_auth_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") in ("A01", "A07")
+            for issue in issues
+        )
+        has_crypto_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") == "A02"
+            for issue in issues
+        )
+        has_injection_issues = any(
+            isinstance(issue, dict) and issue.get("owasp_id") == "A03"
+            for issue in issues
+        )
 
         pci_status = "failed" if (has_auth_issues or has_crypto_issues or has_injection_issues) else ("review_needed" if total_findings > 0 else "passed")
         soc2_status = "failed" if critical_count > 0 else ("review_needed" if total_findings > 0 else "passed")
