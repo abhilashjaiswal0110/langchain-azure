@@ -6,6 +6,7 @@ across multiple programming languages.
 
 import json
 import uuid
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -132,8 +133,12 @@ export class {class_name} {{
 ''',
     }
 
-    # Generate class name from description
-    class_name = "".join(word.capitalize() for word in description.split()[:3])
+    # Generate class name from description - sanitized to valid identifier
+    words = [w for w in re.sub(r'[^a-zA-Z0-9_\s]', '', description).split()[:3] if w]
+    class_name = "".join(word.capitalize() for word in words) if words else "GeneratedClass"
+    # Ensure it starts with letter or underscore
+    if not class_name[0].isalpha() and class_name[0] != '_':
+        class_name = 'Class' + class_name
 
     code_template = templates.get(language, templates["python"])
     generated_code = code_template.format(
@@ -156,7 +161,8 @@ export class {class_name} {{
     }
 
     if include_tests:
-        result["tests"] = f'''"""Tests for {class_name}"""
+        if language == "python":
+            result["tests"] = f'''"""Tests for {class_name}"""
 
 import pytest
 
@@ -171,6 +177,8 @@ def test_{class_name.lower()}_execute():
     result = instance.execute({{"test": "data"}})
     assert result["status"] == "success"
 '''
+        else:
+            result["tests"] = f"# Test generation for {language} not yet implemented"
 
     _code_store[code_id] = result
     return json.dumps(result, indent=2)

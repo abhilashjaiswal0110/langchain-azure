@@ -248,20 +248,25 @@ def run_tests(
     run_id = f"RUN-{str(uuid.uuid4())[:8].upper()}"
 
     # Simulated test run
+    summary = {
+        "total": 10,
+        "passed": 9,
+        "failed": 1,
+        "skipped": 0,
+        "duration_seconds": 2.5,
+    }
+    
+    # Derive status from summary counts
+    status = "passed" if summary["failed"] == 0 else "failed"
+    
     result = {
         "id": run_id,
         "timestamp": datetime.now().isoformat(),
         "session_id": session_id,
         "framework": framework,
         "test_path": test_path,
-        "status": "passed",
-        "summary": {
-            "total": 10,
-            "passed": 9,
-            "failed": 1,
-            "skipped": 0,
-            "duration_seconds": 2.5,
-        },
+        "status": status,
+        "summary": summary,
         "failed_tests": [
             {
                 "name": "test_edge_case",
@@ -269,7 +274,7 @@ def run_tests(
                 "file": "test_module.py",
                 "line": 45,
             },
-        ],
+        ] if summary["failed"] > 0 else [],
     }
 
     return json.dumps(result, indent=2)

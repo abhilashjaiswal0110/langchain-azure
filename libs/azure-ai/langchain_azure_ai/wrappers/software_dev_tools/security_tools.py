@@ -7,7 +7,6 @@ import json
 import uuid
 import re
 from datetime import datetime
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -70,7 +69,7 @@ def scan_security_issues(
             "category": "A03",
         },
         {
-            "pattern": r"subprocess\.call\s*\([^,]*shell\s*=\s*True",
+            "pattern": r"subprocess\.(call|run|Popen)\s*\([^)]*shell\s*=\s*True",
             "issue": "Shell injection vulnerability",
             "severity": "high",
             "category": "A03",
@@ -108,6 +107,12 @@ def scan_security_issues(
     ]
 
     severity_levels = ["low", "medium", "high", "critical"]
+
+    # Normalize and validate severity_threshold to avoid ValueError
+    if isinstance(severity_threshold, str):
+        severity_threshold = severity_threshold.lower()
+    if severity_threshold not in severity_levels:
+        severity_threshold = "medium"
     threshold_index = severity_levels.index(severity_threshold)
 
     for pattern_info in security_patterns:
