@@ -243,6 +243,7 @@ def load_agents():
         ITOperationsWrapper,
         SalesIntelligenceWrapper,
         RecruitmentWrapper,
+        SoftwareDevelopmentWrapper,
     )
 
     # Check if Azure AI Foundry is enabled
@@ -373,6 +374,15 @@ def load_agents():
         logger.info("Recruitment DeepAgent loaded")
     except Exception as e:
         logger.warning(f"Failed to load Recruitment DeepAgent: {e}")
+
+    try:
+        registry.register_deep_agent(
+            "software_development",
+            SoftwareDevelopmentWrapper(name="software-development", model=model, temperature=temperature),
+        )
+        logger.info("Software Development DeepAgent loaded")
+    except Exception as e:
+        logger.warning(f"Failed to load Software Development DeepAgent: {e}")
 
     registry._initialized = True
     logger.info(f"Total agents loaded: {registry.total_agents}")
@@ -1020,8 +1030,19 @@ async def deep_agent_subagents(agent_name: str):
             {'name': 'Answer Evaluator', 'description': 'Candidate evaluation'},
             {'name': 'Report Generator', 'description': 'Report and analytics generation'},
         ],
+        'software_development': [
+            {'name': 'Requirements', 'description': 'Requirements analysis and user stories'},
+            {'name': 'Architecture', 'description': 'System design and API specs'},
+            {'name': 'Code Generator', 'description': 'Code generation and refactoring'},
+            {'name': 'Code Reviewer', 'description': 'Code review and quality analysis'},
+            {'name': 'Testing', 'description': 'Test generation and coverage analysis'},
+            {'name': 'Security', 'description': 'Security scanning and compliance'},
+            {'name': 'DevOps', 'description': 'CI/CD pipelines and deployment'},
+            {'name': 'Debugging', 'description': 'Error analysis and optimization'},
+            {'name': 'Documentation', 'description': 'API docs and user guides'},
+        ],
     }
-    
+
     return {"subagents": subagent_configs.get(agent_name, [])}
 
 
