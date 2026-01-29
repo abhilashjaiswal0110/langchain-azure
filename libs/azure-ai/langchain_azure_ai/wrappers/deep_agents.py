@@ -811,10 +811,6 @@ Always prioritize candidate experience and maintain fair, unbiased evaluation.""
             tools: List of tools for the supervisor agent.
             **kwargs: Additional arguments passed to parent.
         """
-        # Register extended instructions (override default)
-        DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS["recruitment"] = (
-            self.RECRUITMENT_INSTRUCTIONS
-        )
 
         super().__init__(
             name=name,
