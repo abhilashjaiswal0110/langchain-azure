@@ -527,11 +527,6 @@ Always prioritize service availability and minimize mean time to recovery (MTTR)
             tools: List of tools for the supervisor agent.
             **kwargs: Additional arguments passed to parent.
         """
-        # Register extended instructions (override default)
-        DeepAgentWrapper.DEFAULT_SUPERVISOR_INSTRUCTIONS["it_operations"] = (
-            self.IT_OPS_INSTRUCTIONS
-        )
-
         super().__init__(
             name=name,
             instructions=instructions or self.IT_OPS_INSTRUCTIONS,
