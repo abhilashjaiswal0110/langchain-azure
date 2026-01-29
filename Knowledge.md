@@ -21,7 +21,7 @@ langchain-azure/
 └── README.md
 ```
 
-## Core Package: langchain-azure-ai (v1.0.4)
+## Core Package: langchain-azure-ai (v2.0.0)
 
 ### Key Features
 
@@ -47,6 +47,11 @@ langchain-azure/
    - `AzureAITextAnalyticsHealthTool` - Health text analytics
    - `AzureAIImageAnalysisTool` - Image analysis
    - `AIServicesToolkit` - Unified access to all tools
+
+5. **Enterprise Connectors** (New in v2.0.0)
+   - `CopilotStudioConnector` - Export agents to Microsoft 365 Copilot
+   - `TeamsBotConnector` - Microsoft Teams bot integration
+   - `AzureFunctionsDeployer` - Serverless deployment to Azure Functions
 
 5. **Enterprise Observability & Monitoring**
    - `AzureAIOpenTelemetryTracer` - OpenTelemetry tracing integration
@@ -471,7 +476,7 @@ def my_agent_method(self, input_data):
 
 ---
 
-**Last Updated**: 2026-01-24  
+**Last Updated**: 2026-01-29  
 **Repository Version**: langchain-azure-ai v2.0.0  
 **LangChain Version**: 1.0.2  
 **LangGraph CLI**: 0.4.4+

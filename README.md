@@ -40,6 +40,7 @@ LangChain Azure AI also contains:
 * [Azure AI Search](./libs/azure-ai/langchain_azure_ai/vectorstores)
 * [Cosmos DB](./libs/azure-ai/langchain_azure_ai/vectorstores)
 * [Azure AI Agent Service](./libs/azure-ai/langchain_azure_ai/agents)
+* [Enterprise Connectors](./libs/azure-ai/langchain_azure_ai/connectors) - Copilot Studio, Teams Bot, Azure Functions
 
 Here's a quick start example to show you how to get started with the Chat Completions model. For more details and tutorials see [Develop with LangChain and LangGraph and models from Azure AI Foundry](https://aka.ms/azureai/langchain).
 
@@ -229,6 +230,77 @@ os.environ["AZURE_AI_ENDPOINT"] = os.getenv("AZURE_ENDPOINT")
 os.environ["AZURE_AI_CREDENTIAL"] = os.getenv("AZURE_CREDENTIAL")  # Changed from AZURE_AI_API_KEY
 
 model = init_chat_model("azure_ai:gpt-5-mini")
+```
+
+## 🔌 Enterprise Connectors
+
+The `langchain-azure-ai` package includes enterprise-grade connectors for seamless integration with Microsoft 365 and Azure services.
+
+### Microsoft 365 Copilot Integration
+
+Export your LangChain agents to Microsoft 365 Copilot:
+
+```python
+from langchain_azure_ai.connectors import CopilotStudioConnector
+
+connector = CopilotStudioConnector()
+manifest = connector.export_agent(
+    agent=my_agent,
+    name="IT Helpdesk",
+    description="Enterprise IT support agent"
+)
+
+# Create complete M365 Copilot plugin
+connector.create_m365_copilot_plugin(
+    agent=my_agent,
+    output_dir="copilot_plugin"
+)
+```
+
+### Microsoft Teams Bot Integration
+
+Deploy your agent as a Teams bot:
+
+```python
+from langchain_azure_ai.connectors import TeamsBotConnector
+from fastapi import FastAPI
+
+app = FastAPI()
+bot = TeamsBotConnector()
+bot.register_agent("helpdesk", helpdesk_agent)
+
+# Add Teams routes to FastAPI app
+app.include_router(bot.create_fastapi_routes())
+
+# Generate Teams app manifest
+manifest = bot.generate_manifest(
+    name="IT Support Bot",
+    description="Enterprise helpdesk bot"
+)
+```
+
+### Azure Functions Deployment
+
+Deploy your agents as serverless Azure Functions:
+
+```python
+from langchain_azure_ai.connectors import AzureFunctionsDeployer
+
+deployer = AzureFunctionsDeployer()
+deployer.generate_scaffold(
+    agents={"helpdesk": helpdesk_agent},
+    output_dir="functions_app",
+    scaling_config={
+        "min_instances": 1,
+        "max_instances": 10
+    }
+)
+
+# Generates:
+# - Function app code
+# - Bicep templates for infrastructure
+# - GitHub Actions CI/CD workflows
+# - Deploy scripts (bash & PowerShell)
 ```
 
 # Welcome Contributors

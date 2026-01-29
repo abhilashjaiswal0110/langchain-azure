@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-01-29
+
+### Added
+- **Phase 3: Enterprise Connectors Module** (`langchain_azure_ai.connectors`)
+  - `CopilotStudioConnector` - Export LangChain agents to Microsoft 365 Copilot
+  - `TeamsBotConnector` - Microsoft Teams bot integration with adaptive cards
+  - `AzureFunctionsDeployer` - Serverless deployment to Azure Functions
+  - Full OpenAPI manifest generation for Copilot plugins
+  - Teams app manifest and bot configuration generation
+  - Bicep templates for Azure infrastructure as code
+  - GitHub Actions CI/CD workflows for automated deployment
+- **Enhanced Documentation**
+  - Updated Knowledge.md with Phase 3 connectors information
+  - Updated Agents.md with latest deployment patterns
+  - Updated README.md with Enterprise Connectors examples
+  - Comprehensive connector usage examples and best practices
+
+### Changed
+- Version bump to 2.0.0 to reflect major enterprise features addition
+- Enhanced documentation structure for better discoverability
+- Improved code examples with real-world enterprise scenarios
+
+### Documentation
+- All documentation updated to reflect 2026-01-29 release
+- Added comprehensive connector examples to README.md
+- Updated version references across all markdown files
+
 ## [Unreleased]
 
 ### Added
