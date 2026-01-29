@@ -181,6 +181,29 @@ def trace_execution(
         if len(calls) > 1:  # Function is called somewhere
             call_graph.append({"function": func, "call_count": len(calls) - 1})
 
+    # Calculate actual nesting depth by analyzing indentation levels
+    def calculate_nesting_depth(code_text: str) -> int:
+        """Calculate the maximum nesting depth based on indentation."""
+        max_depth = 0
+        lines = code_text.split("\n")
+        for line in lines:
+            if not line.strip():  # Skip empty lines
+                continue
+            # Count leading spaces/tabs
+            stripped = line.lstrip()
+            if not stripped:
+                continue
+            leading_whitespace = len(line) - len(stripped)
+            # Assume 4 spaces or 1 tab per indentation level
+            if "\t" in line[:leading_whitespace]:
+                depth = line[:leading_whitespace].count("\t")
+            else:
+                depth = leading_whitespace // 4
+            max_depth = max(max_depth, depth)
+        return max_depth
+
+    nesting_depth = calculate_nesting_depth(code)
+
     result = {
         "id": trace_id,
         "timestamp": datetime.now().isoformat(),
@@ -197,7 +220,7 @@ def trace_execution(
         "complexity_indicators": {
             "cyclomatic_complexity": conditionals + loops + 1,
             "function_count": len(functions),
-            "nesting_depth": code.count("    ") // max(len(code.split("\n")), 1),
+            "nesting_depth": nesting_depth,
         },
     }
 

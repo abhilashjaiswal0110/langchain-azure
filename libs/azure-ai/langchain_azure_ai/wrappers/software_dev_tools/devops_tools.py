@@ -293,7 +293,7 @@ def generate_dockerfile(
 
     Args:
         project_type: Type of project.
-        base_image: Optional custom base image.
+        base_image: Optional custom base image (e.g., "python:3.12-slim", "node:22-alpine").
         port: Port to expose.
         session_id: Session identifier.
 
@@ -302,8 +302,137 @@ def generate_dockerfile(
     """
     docker_id = f"DOCKER-{str(uuid.uuid4())[:8].upper()}"
 
-    dockerfiles = {
-        "python-api": f"""# Multi-stage build for Python API
+    # Default base images for each project type
+    default_base_images = {
+        "python-api": "python:3.11-slim",
+        "node-api": "node:20-alpine",
+        "static": "nginx:alpine",
+    }
+
+    # Determine the actual base image to use
+    actual_base_image = base_image or default_base_images.get(project_type, "python:3.11-slim")
+
+    # Extract image family for multi-stage builds (e.g., "python:3.12-slim" -> "python")
+    image_family = actual_base_image.split(":")[0].split("/")[-1]
+
+    # Generate Dockerfile based on project type with custom base image support
+    if project_type == "python-api":
+        # For Python, use the custom base image if provided
+        dockerfile_content = f"""# Multi-stage build for Python API
+FROM {actual_base_image} as builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM {actual_base_image}
+
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE {port}
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "{port}"]
+"""
+
+    elif project_type == "node-api":
+        dockerfile_content = f"""# Multi-stage build for Node.js API
+FROM {actual_base_image} as builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+
+FROM {actual_base_image}
+
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+
+ENV NODE_ENV=production
+
+EXPOSE {port}
+
+CMD ["node", "index.js"]
+"""
+
+    elif project_type == "static":
+        dockerfile_content = f"""FROM {actual_base_image}
+
+COPY dist/ /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE {port}
+
+CMD ["nginx", "-g", "daemon off;"]
+"""
+
+    elif project_type == "go-api":
+        # Support for Go applications with custom base image
+        go_base = actual_base_image if "go" in actual_base_image.lower() else "golang:1.22-alpine"
+        runtime_base = "alpine:latest" if base_image is None else actual_base_image
+        dockerfile_content = f"""# Multi-stage build for Go API
+FROM {go_base} as builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+
+FROM {runtime_base}
+
+WORKDIR /app
+COPY --from=builder /app/main .
+
+EXPOSE {port}
+
+CMD ["./main"]
+"""
+
+    elif project_type == "java-api":
+        # Support for Java applications with custom base image
+        java_base = actual_base_image if "java" in actual_base_image.lower() or "openjdk" in actual_base_image.lower() else "eclipse-temurin:17-jdk-alpine"
+        runtime_base = actual_base_image if "jre" in actual_base_image.lower() else "eclipse-temurin:17-jre-alpine"
+        dockerfile_content = f"""# Multi-stage build for Java API
+FROM {java_base} as builder
+
+WORKDIR /app
+COPY . .
+RUN ./gradlew build -x test || ./mvnw package -DskipTests
+
+FROM {runtime_base}
+
+WORKDIR /app
+COPY --from=builder /app/build/libs/*.jar app.jar
+# Or for Maven: COPY --from=builder /app/target/*.jar app.jar
+
+EXPOSE {port}
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
+"""
+
+    else:
+        # Default to Python if project type is unknown, but still honor custom base image
+        if base_image:
+            dockerfile_content = f"""# Custom Dockerfile
+FROM {actual_base_image}
+
+WORKDIR /app
+COPY . .
+
+EXPOSE {port}
+
+# Update CMD based on your application requirements
+CMD ["echo", "Update this CMD for your application"]
+"""
+        else:
+            dockerfile_content = f"""# Multi-stage build for Python API
 FROM python:3.11-slim as builder
 
 WORKDIR /app
@@ -322,45 +451,15 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE {port}
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "{port}"]
-""",
-        "node-api": f"""# Multi-stage build for Node.js API
-FROM node:20-alpine as builder
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-
-FROM node:20-alpine
-
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY . .
-
-ENV NODE_ENV=production
-
-EXPOSE {port}
-
-CMD ["node", "index.js"]
-""",
-        "static": f"""FROM nginx:alpine
-
-COPY dist/ /usr/share/nginx/html/
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE {port}
-
-CMD ["nginx", "-g", "daemon off;"]
-""",
-    }
-
-    dockerfile_content = dockerfiles.get(project_type, dockerfiles["python-api"])
+"""
 
     result = {
         "id": docker_id,
         "timestamp": datetime.now().isoformat(),
         "session_id": session_id,
         "project_type": project_type,
-        "base_image": base_image or "python:3.11-slim",
+        "base_image": actual_base_image,
+        "custom_base_image": base_image is not None,
         "port": port,
         "dockerfile": dockerfile_content,
         "best_practices": [
@@ -456,6 +555,67 @@ spec:
   type: ClusterIP
 """
 
+    # Add ConfigMap for application configuration
+    configmap = f"""apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {service_name}-config
+  namespace: {namespace}
+data:
+  APP_NAME: "{service_name}"
+  APP_PORT: "{port}"
+  LOG_LEVEL: "info"
+  # Add application-specific configuration here
+  # Example:
+  # DATABASE_HOST: "db-service"
+  # CACHE_TTL: "3600"
+"""
+
+    # Add HorizontalPodAutoscaler for auto-scaling
+    hpa = f"""apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {service_name}-hpa
+  namespace: {namespace}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {service_name}
+  minReplicas: {max(1, replicas // 2)}
+  maxReplicas: {replicas * 3}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+"""
+
     result = {
         "id": k8s_id,
         "timestamp": datetime.now().isoformat(),
@@ -465,10 +625,14 @@ spec:
         "manifests": {
             "deployment": deployment,
             "service": service,
+            "configmap": configmap,
+            "hpa": hpa,
         },
         "files": [
             f"k8s/{service_name}-deployment.yaml",
             f"k8s/{service_name}-service.yaml",
+            f"k8s/{service_name}-configmap.yaml",
+            f"k8s/{service_name}-hpa.yaml",
         ],
     }
 

@@ -65,10 +65,11 @@ def generate_unit_tests(
             "type": "happy_path",
         })
 
-    # Generate test code template
-    test_template = f'''"""Unit tests generated for the module.
+    # Generate framework-specific test code template
+    if framework == "pytest":
+        test_template = f'''"""Unit tests generated for the module.
 
-Test Framework: {framework}
+Test Framework: pytest
 Coverage Target: {coverage_target}%
 """
 
@@ -81,9 +82,169 @@ def sample_data():
     return {{"key": "value"}}
 
 '''
+        for test in tests:
+            test_template += f'''
+def {test["test_name"]}(sample_data):
+    """
+    {test["description"]}
+    Type: {test["type"]}
+    """
+    # Arrange
+    # TODO: Setup test data
 
-    for test in tests:
-        test_template += f'''
+    # Act
+    # TODO: Execute function
+
+    # Assert
+    # TODO: Verify results
+    assert True  # Replace with actual assertions
+
+'''
+
+    elif framework == "unittest":
+        test_template = f'''"""Unit tests generated for the module.
+
+Test Framework: unittest
+Coverage Target: {coverage_target}%
+"""
+
+import unittest
+
+
+class TestModule(unittest.TestCase):
+    """Test cases for the module."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.sample_data = {{"key": "value"}}
+
+    def tearDown(self):
+        """Clean up after tests."""
+        pass
+
+'''
+        for test in tests:
+            test_template += f'''
+    def {test["test_name"]}(self):
+        """
+        {test["description"]}
+        Type: {test["type"]}
+        """
+        # Arrange
+        # TODO: Setup test data
+
+        # Act
+        # TODO: Execute function
+
+        # Assert
+        # TODO: Verify results
+        self.assertTrue(True)  # Replace with actual assertions
+
+'''
+        test_template += '''
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+    elif framework == "jest":
+        test_template = f'''/**
+ * Unit tests generated for the module.
+ *
+ * Test Framework: Jest
+ * Coverage Target: {coverage_target}%
+ */
+
+describe("Module Tests", () => {{
+    let sampleData;
+
+    beforeEach(() => {{
+        sampleData = {{ key: "value" }};
+    }});
+
+'''
+        for test in tests:
+            test_name_camel = test["test_name"].replace("_", " ").title().replace(" ", "")
+            test_template += f'''
+    test("{test["test_name"].replace("_", " ")}", () => {{
+        // {test["description"]}
+        // Type: {test["type"]}
+
+        // Arrange
+        // TODO: Setup test data
+
+        // Act
+        // TODO: Execute function
+
+        // Assert
+        // TODO: Verify results
+        expect(true).toBe(true);  // Replace with actual assertions
+    }});
+
+'''
+        test_template += '''});
+'''
+
+    elif framework == "mocha":
+        test_template = f'''/**
+ * Unit tests generated for the module.
+ *
+ * Test Framework: Mocha + Chai
+ * Coverage Target: {coverage_target}%
+ */
+
+const {{ expect }} = require("chai");
+
+describe("Module Tests", function() {{
+    let sampleData;
+
+    beforeEach(function() {{
+        sampleData = {{ key: "value" }};
+    }});
+
+'''
+        for test in tests:
+            test_template += f'''
+    it("{test["test_name"].replace("_", " ")}", function() {{
+        // {test["description"]}
+        // Type: {test["type"]}
+
+        // Arrange
+        // TODO: Setup test data
+
+        // Act
+        // TODO: Execute function
+
+        // Assert
+        // TODO: Verify results
+        expect(true).to.be.true;  // Replace with actual assertions
+    }});
+
+'''
+        test_template += '''});
+'''
+
+    else:
+        # Default to pytest-style for unknown frameworks
+        test_template = f'''"""Unit tests generated for the module.
+
+Test Framework: {framework}
+Coverage Target: {coverage_target}%
+"""
+
+# Note: Using pytest-style syntax as default
+
+import pytest
+
+# Test fixtures
+@pytest.fixture
+def sample_data():
+    """Provide sample test data."""
+    return {{"key": "value"}}
+
+'''
+        for test in tests:
+            test_template += f'''
 def {test["test_name"]}(sample_data):
     """
     {test["description"]}
@@ -186,7 +347,7 @@ def analyze_test_coverage(
     - Uncovered code sections
 
     Args:
-        test_results: Test results or coverage report.
+        test_results: Test results or coverage report (JSON or text format).
         source_files: Optional source files to analyze.
         session_id: Session identifier.
 
@@ -195,27 +356,105 @@ def analyze_test_coverage(
     """
     coverage_id = f"COV-{str(uuid.uuid4())[:8].upper()}"
 
-    # Simulated coverage analysis
+    # Parse test results to extract coverage data
+    line_coverage = 0.0
+    branch_coverage = 0.0
+    function_coverage = 0.0
+    uncovered_areas = []
+    parsed_data = {}
+
+    try:
+        parsed_data = json.loads(test_results)
+        # Extract coverage from parsed JSON
+        if "coverage" in parsed_data:
+            cov_data = parsed_data["coverage"]
+            line_coverage = float(cov_data.get("line_coverage", cov_data.get("lines", 0)))
+            branch_coverage = float(cov_data.get("branch_coverage", cov_data.get("branches", 0)))
+            function_coverage = float(cov_data.get("function_coverage", cov_data.get("functions", 0)))
+        elif "totals" in parsed_data:
+            # Coverage.py JSON format
+            totals = parsed_data["totals"]
+            line_coverage = float(totals.get("percent_covered", 0))
+            branch_coverage = float(totals.get("percent_covered_branches", line_coverage * 0.9))
+            function_coverage = float(totals.get("percent_covered_functions", line_coverage * 1.1))
+        # Extract uncovered files/lines if available
+        if "files" in parsed_data:
+            for file_path, file_data in parsed_data["files"].items():
+                missing = file_data.get("missing_lines", file_data.get("missing", []))
+                if missing:
+                    uncovered_areas.append({
+                        "file": file_path,
+                        "lines": str(missing[:5]) if isinstance(missing, list) else str(missing),
+                        "reason": "Uncovered code path",
+                    })
+    except json.JSONDecodeError:
+        # Parse text-based coverage report (e.g., pytest output)
+        import re
+        # Look for percentage patterns like "75%" or "75.5%"
+        percentages = re.findall(r"(\d+\.?\d*)%", test_results)
+        if percentages:
+            line_coverage = float(percentages[0])
+            branch_coverage = float(percentages[1]) if len(percentages) > 1 else line_coverage * 0.9
+            function_coverage = float(percentages[2]) if len(percentages) > 2 else line_coverage * 1.1
+
+        # Look for "TOTAL ... XX%" pattern from pytest-cov
+        total_match = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", test_results)
+        if total_match:
+            line_coverage = float(total_match.group(1))
+            branch_coverage = line_coverage * 0.9
+            function_coverage = min(line_coverage * 1.1, 100.0)
+
+        # Look for missing lines in coverage output
+        missing_matches = re.findall(r"(\S+\.py)\s+\d+\s+\d+\s+\d+%\s+([\d,\-\s]+)", test_results)
+        for file_path, missing_lines in missing_matches:
+            if missing_lines.strip():
+                uncovered_areas.append({
+                    "file": file_path,
+                    "lines": missing_lines.strip()[:50],
+                    "reason": "Uncovered code path",
+                })
+
+    # Ensure values are within valid range
+    line_coverage = min(max(line_coverage, 0.0), 100.0)
+    branch_coverage = min(max(branch_coverage, 0.0), 100.0)
+    function_coverage = min(max(function_coverage, 0.0), 100.0)
+
+    # If no coverage data was extracted, provide defaults with explanation
+    if line_coverage == 0.0 and branch_coverage == 0.0:
+        uncovered_areas.append({
+            "file": "unknown",
+            "lines": "N/A",
+            "reason": "Could not parse coverage data from input",
+        })
+
+    # Generate recommendations based on actual coverage
+    recommendations = []
+    if line_coverage < 80:
+        recommendations.append(f"Increase line coverage from {line_coverage:.1f}% to at least 80%")
+    if branch_coverage < 70:
+        recommendations.append(f"Improve branch coverage from {branch_coverage:.1f}% to at least 70%")
+    if function_coverage < 90:
+        recommendations.append(f"Add tests for uncovered functions (currently {function_coverage:.1f}%)")
+    if uncovered_areas:
+        recommendations.append("Add tests for error handling paths")
+        recommendations.append("Cover edge cases in input validation")
+    if not recommendations:
+        recommendations.append("Coverage meets quality standards - consider adding property-based tests")
+
+    threshold = 80.0
     result = {
         "id": coverage_id,
         "timestamp": datetime.now().isoformat(),
         "session_id": session_id,
         "coverage": {
-            "line_coverage": 75.5,
-            "branch_coverage": 68.2,
-            "function_coverage": 85.0,
+            "line_coverage": round(line_coverage, 1),
+            "branch_coverage": round(branch_coverage, 1),
+            "function_coverage": round(function_coverage, 1),
         },
-        "uncovered_areas": [
-            {"file": "module.py", "lines": "45-52", "reason": "Error handling path"},
-            {"file": "module.py", "lines": "78-80", "reason": "Edge case"},
-        ],
-        "recommendations": [
-            "Add tests for error handling paths",
-            "Cover edge cases in input validation",
-            "Add integration tests for API endpoints",
-        ],
-        "meets_threshold": False,
-        "threshold": 80.0,
+        "uncovered_areas": uncovered_areas[:10],  # Limit to 10 entries
+        "recommendations": recommendations,
+        "meets_threshold": line_coverage >= threshold,
+        "threshold": threshold,
     }
 
     return json.dumps(result, indent=2)
@@ -303,6 +542,9 @@ def generate_test_data(
     Returns:
         JSON string with generated test data.
     """
+    import random
+    import string
+
     data_id = f"TD-{str(uuid.uuid4())[:8].upper()}"
 
     # Parse schema
@@ -311,21 +553,83 @@ def generate_test_data(
     except json.JSONDecodeError:
         schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
 
-    # Generate sample data
+    # Extract field definitions from schema
+    properties = schema_dict.get("properties", {"name": {"type": "string"}})
+
+    # Helper functions for data generation
+    def generate_realistic_value(field_name: str, field_type: str, index: int) -> any:
+        """Generate realistic test data based on field name and type."""
+        field_lower = field_name.lower()
+        if "email" in field_lower:
+            return f"user{index+1}@example.com"
+        elif "name" in field_lower:
+            first_names = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry"]
+            last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller"]
+            return f"{first_names[index % len(first_names)]} {last_names[index % len(last_names)]}"
+        elif "phone" in field_lower:
+            return f"+1-555-{100+index:03d}-{1000+index:04d}"
+        elif "id" in field_lower:
+            return f"{field_name}_{index+1}"
+        elif "date" in field_lower or "time" in field_lower:
+            return datetime.now().isoformat()
+        elif "age" in field_lower:
+            return 20 + (index % 50)
+        elif "price" in field_lower or "amount" in field_lower:
+            return round(10.0 + index * 5.5, 2)
+        elif "count" in field_lower or "quantity" in field_lower:
+            return index + 1
+        elif "url" in field_lower:
+            return f"https://example.com/resource/{index+1}"
+        elif field_type == "integer" or field_type == "number":
+            return index + 1
+        elif field_type == "boolean":
+            return index % 2 == 0
+        else:
+            return f"value_{index+1}"
+
+    def generate_edge_case_value(field_name: str, field_type: str, index: int) -> any:
+        """Generate edge case test data."""
+        edge_cases = [
+            "",  # Empty string
+            None,  # Null value
+            "x" * 255,  # Max length string
+            "A" * 1000,  # Very long string
+            "<script>alert('xss')</script>",  # XSS attempt
+            "'; DROP TABLE users; --",  # SQL injection attempt
+            "user@.com",  # Invalid email
+            -1,  # Negative number
+            0,  # Zero
+            2**31 - 1,  # Max int32
+        ]
+        return edge_cases[index % len(edge_cases)]
+
+    def generate_random_value(field_name: str, field_type: str, index: int) -> any:
+        """Generate random test data."""
+        if field_type == "integer" or field_type == "number":
+            return random.randint(-1000, 1000)
+        elif field_type == "boolean":
+            return random.choice([True, False])
+        else:
+            length = random.randint(1, 50)
+            return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+    # Generate the requested number of records (honor count parameter)
     test_data = []
-    for i in range(min(count, 5)):  # Limit for demo
-        if data_type == "realistic":
-            test_data.append({
-                "id": f"user_{i+1}",
-                "name": f"Test User {i+1}",
-                "email": f"user{i+1}@example.com",
-            })
-        elif data_type == "edge_case":
-            test_data.append({
-                "id": "" if i == 0 else "x" * 255 if i == 1 else f"user_{i}",
-                "name": None if i == 0 else "A" * 1000 if i == 1 else f"User {i}",
-                "email": "invalid" if i == 0 else "@.com" if i == 1 else f"u{i}@e.com",
-            })
+    for i in range(count):
+        record = {}
+        for field_name, field_def in properties.items():
+            field_type = field_def.get("type", "string") if isinstance(field_def, dict) else "string"
+
+            if data_type == "realistic":
+                record[field_name] = generate_realistic_value(field_name, field_type, i)
+            elif data_type == "edge_case":
+                record[field_name] = generate_edge_case_value(field_name, field_type, i)
+            elif data_type == "random":
+                record[field_name] = generate_random_value(field_name, field_type, i)
+            else:
+                record[field_name] = generate_realistic_value(field_name, field_type, i)
+
+        test_data.append(record)
 
     result = {
         "id": data_id,
