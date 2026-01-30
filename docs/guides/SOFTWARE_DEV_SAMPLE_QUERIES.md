@@ -813,7 +813,7 @@ curl -X POST http://localhost:8000/api/deepagent/software_development/chat \
 
 ### Agent Not Found
 If you see "Error: DeepAgent software_development not found":
-1. Restart the server (see [RESTART_SERVER.md](RESTART_SERVER.md))
+1. Restart the server (see [RESTART_SERVER.md](../troubleshooting/RESTART_SERVER.md))
 2. Check server logs for loading errors
 3. Verify `.env` file has `AZURE_OPENAI_API_KEY` configured
 
@@ -833,7 +833,7 @@ If responses are slow:
 
 ## Additional Resources
 
-- [Architecture Documentation](docs/ENTERPRISE_ARCHITECTURE.md)
-- [Server Restart Procedure](RESTART_SERVER.md)
-- [Software Development DeepAgent Implementation](libs/azure-ai/langchain_azure_ai/wrappers/deep_agents.py)
-- [Tool Implementations](libs/azure-ai/langchain_azure_ai/wrappers/software_dev_tools/)
+- [Architecture Documentation](../architecture/ENTERPRISE_ARCHITECTURE.md)
+- [Server Restart Procedure](../troubleshooting/RESTART_SERVER.md)
+- [Software Development DeepAgent Implementation](../../libs/azure-ai/langchain_azure_ai/wrappers/deep_agents.py)
+- [Tool Implementations](../../libs/azure-ai/langchain_azure_ai/wrappers/software_dev_tools/)

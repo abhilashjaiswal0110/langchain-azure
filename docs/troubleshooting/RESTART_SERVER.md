@@ -36,7 +36,7 @@ kill -9 <PID_NUMBER>
 ### Step 2: Activate Virtual Environment
 
 ```bash
-cd "c:\Users\a833555\OneDrive - ATOS\Gitwork\langchain-azure"
+cd <repo-root>
 
 # Windows
 .venv\Scripts\activate

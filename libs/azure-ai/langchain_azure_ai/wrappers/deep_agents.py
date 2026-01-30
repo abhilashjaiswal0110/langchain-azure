@@ -418,6 +418,7 @@ Maintain compliance and candidate experience throughout the process.""",
             - type='tool_start': Tool execution beginning
             - type='tool_result': Tool execution completed
             - type='complete': Final response
+            - type='error': Error occurred during execution (data contains 'error' and 'session_id')
 
         Example:
             ```python
@@ -443,8 +444,19 @@ Maintain compliance and candidate experience throughout the process.""",
             },
         }
 
-        # Prepare input
-        input_dict = {"messages": [HumanMessage(content=message)]}
+        # Prepare input - initialize the same state shape as execute_workflow()
+        # For DeepAgents built via _create_multi_agent_graph(), include routing state
+        if self.sub_agents:
+            # Multi-agent graph expects full state
+            input_dict = {
+                "messages": [HumanMessage(content=message)],
+                "current_agent": "supervisor",
+                "task_status": "pending",
+                "results": {},
+            }
+        else:
+            # Simple agent only needs messages
+            input_dict = {"messages": [HumanMessage(content=message)]}
         config = {"configurable": {"thread_id": effective_session_id}}
 
         try:
@@ -456,8 +468,14 @@ Maintain compliance and candidate experience throughout the process.""",
                 tool_calls_seen = set()
                 final_state = None
 
-                async for chunk in self._agent.astream(input_dict, config=config, **kwargs):
-                    # chunk is a dict with node names as keys
+                # Ensure LangGraph CompiledStateGraph streams node updates, not full state values
+                stream_kwargs = dict(kwargs)
+                if isinstance(self._agent, CompiledStateGraph):
+                    # Only set stream_mode if the caller has not explicitly provided one
+                    stream_kwargs.setdefault("stream_mode", "updates")
+
+                async for chunk in self._agent.astream(input_dict, config=config, **stream_kwargs):
+                    # chunk is a dict with node names as keys when using stream_mode="updates"
                     # Store the final state from the last chunk
                     final_state = chunk
 

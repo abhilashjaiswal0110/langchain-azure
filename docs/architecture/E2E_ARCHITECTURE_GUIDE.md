@@ -427,22 +427,62 @@ User requests Software Development DeepAgent with streaming enabled to see inter
 
 ```javascript
 // JavaScript EventSource for SSE streaming
-const eventSource = new EventSource(
-  'http://localhost:8000/api/deepagent/software_development/chat/stream',
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: "Design a microservices architecture for an e-commerce platform",
-      session_id: "stream-session-456"
-    })
-  }
-);
+// JavaScript fetch() for SSE-style streaming over POST
+const controller = new AbortController();
 
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Event:', data.type, data.data);
-};
+async function streamChat() {
+  const response = await fetch(
+    'http://localhost:8000/api/deepagent/software_development/chat/stream',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: "Design a microservices architecture for an e-commerce platform",
+        session_id: "stream-session-456"
+      }),
+      signal: controller.signal,
+    }
+  );
+
+  if (!response.body) {
+    throw new Error("Streaming not supported in this environment");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 2);
+
+      // Very simple SSE parser: look for lines starting with "data:"
+      const dataLine = rawEvent
+        .split("\n")
+        .find((line) => line.startsWith("data:"));
+      if (!dataLine) continue;
+
+      const json = dataLine.slice("data:".length).trim();
+      if (!json) continue;
+
+      const data = JSON.parse(json);
+      console.log("Event:", data.type, data.data);
+    }
+  }
+}
+
+// Start the stream
+streamChat().catch(console.error);
+
+// To cancel:
+// controller.abort();
 ```
 
 ### Detailed Flow

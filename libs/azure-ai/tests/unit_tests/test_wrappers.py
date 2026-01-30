@@ -342,6 +342,151 @@ class TestDeepAgentWrappers:
         assert wrapper.name == "test-recruitment"
         assert wrapper.agent_subtype == "recruitment"
 
+    @pytest.mark.asyncio
+    async def test_deepagent_streaming_event_sequence(self, mock_env_vars):
+        """Test that astream_chat yields proper event sequence."""
+        from langchain_azure_ai.wrappers import DeepAgentWrapper, SubAgentConfig
+        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+        from unittest.mock import AsyncMock, MagicMock
+
+        # Create a mock compiled graph with astream support
+        mock_graph = MagicMock()
+
+        # Mock the astream method to yield chunks simulating node updates
+        async def mock_astream(input_dict, config=None, **kwargs):
+            # Simulate supervisor node
+            yield {
+                "supervisor": {
+                    "messages": [HumanMessage(content="test"), AIMessage(content="thinking")],
+                }
+            }
+            # Simulate subagent node with tool call
+            tool_call_msg = AIMessage(
+                content="",
+                tool_calls=[{"id": "call_123", "name": "test_tool", "args": {"arg": "value"}}]
+            )
+            yield {
+                "test-subagent": {
+                    "messages": [tool_call_msg, ToolMessage(content="tool result", tool_call_id="call_123")],
+                }
+            }
+            # Final response
+            yield {
+                "supervisor": {
+                    "messages": [AIMessage(content="final response")],
+                }
+            }
+
+        mock_graph.astream = mock_astream
+
+        # Create wrapper with subagents
+        sub_agent = SubAgentConfig(
+            name="test-subagent",
+            instructions="Test instructions",
+            tools=[],
+        )
+
+        wrapper = DeepAgentWrapper(
+            name="test-deep-agent",
+            agent_subtype="it_operations",
+            sub_agents=[sub_agent],
+            existing_agent=mock_graph,
+        )
+
+        # Collect streamed events
+        events = []
+        async for event in wrapper.astream_chat("test message"):
+            events.append(event)
+
+        # Verify event sequence
+        assert len(events) > 0
+
+        # Should start with 'start' event
+        assert events[0]["type"] == "start"
+        assert "session_id" in events[0]["data"]
+
+        # Should have 'thinking' events
+        thinking_events = [e for e in events if e["type"] == "thinking"]
+        assert len(thinking_events) > 0
+
+        # Should have tool events
+        tool_start_events = [e for e in events if e["type"] == "tool_start"]
+        tool_result_events = [e for e in events if e["type"] == "tool_result"]
+        assert len(tool_start_events) > 0
+        assert len(tool_result_events) > 0
+
+        # Should end with 'complete' event
+        assert events[-1]["type"] == "complete"
+        assert "response" in events[-1]["data"]
+        assert "session_id" in events[-1]["data"]
+
+    @pytest.mark.asyncio
+    async def test_deepagent_streaming_error_handling(self, mock_env_vars):
+        """Test that astream_chat yields error event on exception."""
+        from langchain_azure_ai.wrappers import DeepAgentWrapper
+        from unittest.mock import MagicMock
+
+        # Create a mock graph that raises an error
+        mock_graph = MagicMock()
+
+        async def mock_astream_error(input_dict, config=None, **kwargs):
+            raise ValueError("Test error")
+
+        mock_graph.astream = mock_astream_error
+
+        wrapper = DeepAgentWrapper(
+            name="test-deep-agent",
+            agent_subtype="it_operations",
+            existing_agent=mock_graph,
+        )
+
+        # Collect streamed events
+        events = []
+        async for event in wrapper.astream_chat("test message"):
+            events.append(event)
+
+        # Should have start and error events
+        assert len(events) >= 2
+        assert events[0]["type"] == "start"
+        assert events[-1]["type"] == "error"
+        assert "error" in events[-1]["data"]
+        assert "Test error" in events[-1]["data"]["error"]
+
+    @pytest.mark.asyncio
+    async def test_deepagent_streaming_uses_updates_mode(self, mock_env_vars):
+        """Test that astream_chat sets stream_mode='updates' for CompiledStateGraph."""
+        from langchain_azure_ai.wrappers import DeepAgentWrapper
+        from langgraph.graph.state import CompiledStateGraph
+        from langchain_core.messages import AIMessage, HumanMessage
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        # Create a mock CompiledStateGraph
+        mock_graph = MagicMock(spec=CompiledStateGraph)
+
+        # Track kwargs passed to astream
+        astream_kwargs = {}
+
+        async def mock_astream(input_dict, config=None, **kwargs):
+            astream_kwargs.update(kwargs)
+            yield {"supervisor": {"messages": [AIMessage(content="test")]}}
+
+        mock_graph.astream = mock_astream
+
+        wrapper = DeepAgentWrapper(
+            name="test-deep-agent",
+            agent_subtype="it_operations",
+            existing_agent=mock_graph,
+        )
+
+        # Stream chat
+        events = []
+        async for event in wrapper.astream_chat("test message"):
+            events.append(event)
+
+        # Verify stream_mode='updates' was set
+        assert "stream_mode" in astream_kwargs
+        assert astream_kwargs["stream_mode"] == "updates"
+
 
 class TestSoftwareDevelopmentWrapper:
     """Tests for SoftwareDevelopmentWrapper (#9)."""

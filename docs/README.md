@@ -12,7 +12,8 @@ This directory contains comprehensive documentation for the LangChain Azure AI A
 docs/
 ├── README.md (this file)
 ├── architecture/           # System architecture and design
-│   └── ENTERPRISE_ARCHITECTURE.md
+│   ├── ENTERPRISE_ARCHITECTURE.md
+│   └── E2E_ARCHITECTURE_GUIDE.md
 ├── guides/                # User guides and tutorials
 │   ├── DEEPAGENTS_EVALUATION_RESULTS.md
 │   ├── EVALUATION_FRAMEWORK_COMPLETE.md
@@ -33,6 +34,7 @@ docs/
 ### Architecture & Design
 
 - [**Enterprise Architecture**](architecture/ENTERPRISE_ARCHITECTURE.md) - Complete system architecture, component interactions, deployment patterns, and security design
+- [**End-to-End Architecture Guide**](architecture/E2E_ARCHITECTURE_GUIDE.md) - Comprehensive E2E guide with detailed scenarios and streaming examples
 - [Repository Structure](REPOSITORY_STRUCTURE.md) - Codebase organization and module structure
 
 ### User Guides
