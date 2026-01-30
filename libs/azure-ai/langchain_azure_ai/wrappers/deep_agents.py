@@ -454,9 +454,13 @@ Maintain compliance and candidate experience throughout the process.""",
                 iteration = 0
                 current_subagent = None
                 tool_calls_seen = set()
+                final_state = None
 
                 async for chunk in self._agent.astream(input_dict, config=config, **kwargs):
                     # chunk is a dict with node names as keys
+                    # Store the final state from the last chunk
+                    final_state = chunk
+
                     for node_name, node_output in chunk.items():
                         iteration += 1
 
@@ -515,17 +519,28 @@ Maintain compliance and candidate experience throughout the process.""",
                                         },
                                     }
 
-                # Extract final response
-                final_result = await asyncio.to_thread(
-                    self.chat,
-                    message,
-                    thread_id=effective_session_id,
-                )
+                # Extract final response from the streamed state (don't re-execute!)
+                final_response = ""
+                if final_state:
+                    # Get the last node's output
+                    for node_name, node_output in final_state.items():
+                        messages = node_output.get("messages", [])
+                        # Find the last AI message
+                        for msg in reversed(messages):
+                            if isinstance(msg, AIMessage):
+                                final_response = msg.content
+                                break
+                        if final_response:
+                            break
+
+                # If we didn't get a response from streaming, fall back to extracting from state
+                if not final_response and final_state:
+                    final_response = str(final_state)
 
                 yield {
                     "type": "complete",
                     "data": {
-                        "response": final_result,
+                        "response": final_response,
                         "session_id": effective_session_id,
                         "metadata": {
                             "agent_type": self.agent_subtype,
