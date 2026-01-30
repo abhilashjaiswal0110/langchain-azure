@@ -392,6 +392,218 @@ Maintain compliance and candidate experience throughout the process.""",
                 return last_message.get("content", str(last_message))
         return str(result.get("results", {}))
 
+    async def astream_chat(
+        self,
+        message: str,
+        session_id: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        """Stream chat with the DeepAgent, yielding intermediate events.
+
+        This method provides real-time streaming of agent execution, showing:
+        - Thinking/planning phases
+        - Subagent routing decisions
+        - Tool invocations and results
+        - Final synthesized response
+
+        Args:
+            message: The user message to send.
+            session_id: Optional session ID for conversation continuity.
+            **kwargs: Additional keyword arguments.
+
+        Yields:
+            Dict events with 'type' and 'data' fields:
+            - type='start': Session started
+            - type='thinking': Agent reasoning/planning
+            - type='tool_start': Tool execution beginning
+            - type='tool_result': Tool execution completed
+            - type='complete': Final response
+            - type='error': Error occurred during execution (data contains 'error' and 'session_id')
+
+        Example:
+            ```python
+            async for event in agent.astream_chat("Generate tests"):
+                if event['type'] == 'thinking':
+                    print(f"Phase: {event['data']['phase']}")
+                elif event['type'] == 'complete':
+                    print(f"Response: {event['data']['response']}")
+            ```
+        """
+        import uuid
+        import asyncio
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+
+        effective_session_id = session_id or str(uuid.uuid4())
+
+        # Yield start event
+        yield {
+            "type": "start",
+            "data": {
+                "message": "Processing your request...",
+                "session_id": effective_session_id,
+            },
+        }
+
+        # Prepare input - initialize the same state shape as execute_workflow()
+        # For DeepAgents built via _create_multi_agent_graph(), include routing state
+        if self.sub_agents:
+            # Multi-agent graph expects full state
+            input_dict = {
+                "messages": [HumanMessage(content=message)],
+                "current_agent": "supervisor",
+                "task_status": "pending",
+                "results": {},
+            }
+        else:
+            # Simple agent only needs messages
+            input_dict = {"messages": [HumanMessage(content=message)]}
+        config = {"configurable": {"thread_id": effective_session_id}}
+
+        try:
+            # Check if agent has native streaming support
+            if hasattr(self._agent, "astream"):
+                # Stream events from LangGraph
+                iteration = 0
+                current_subagent = None
+                tool_calls_seen = set()
+                final_state = None
+
+                # Ensure LangGraph CompiledStateGraph streams node updates, not full state values
+                stream_kwargs = dict(kwargs)
+                if isinstance(self._agent, CompiledStateGraph):
+                    # Only set stream_mode if the caller has not explicitly provided one
+                    stream_kwargs.setdefault("stream_mode", "updates")
+
+                async for chunk in self._agent.astream(input_dict, config=config, **stream_kwargs):
+                    # chunk is a dict with node names as keys when using stream_mode="updates"
+                    # Store the final state from the last chunk
+                    final_state = chunk
+
+                    for node_name, node_output in chunk.items():
+                        iteration += 1
+
+                        # Supervisor thinking
+                        if node_name == "supervisor":
+                            yield {
+                                "type": "thinking",
+                                "data": {
+                                    "iteration": iteration,
+                                    "phase": "planning",
+                                    "summary": "Supervisor analyzing request and routing...",
+                                    "content": f"Determining the best subagent to handle your request.",
+                                },
+                            }
+
+                        # Subagent execution
+                        elif node_name in self._sub_agent_nodes:
+                            if current_subagent != node_name:
+                                current_subagent = node_name
+                                yield {
+                                    "type": "thinking",
+                                    "data": {
+                                        "iteration": iteration,
+                                        "phase": "execution",
+                                        "summary": f"Routing to {node_name} subagent",
+                                        "content": f"Delegating to specialized {node_name} subagent for expert handling.",
+                                    },
+                                }
+
+                            # Check for tool calls in messages
+                            messages = node_output.get("messages", [])
+                            for msg in messages:
+                                # Tool invocation
+                                if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
+                                    for tool_call in msg.tool_calls:
+                                        tool_id = tool_call.get("id", "")
+                                        if tool_id and tool_id not in tool_calls_seen:
+                                            tool_calls_seen.add(tool_id)
+                                            yield {
+                                                "type": "tool_start",
+                                                "data": {
+                                                    "tool_name": tool_call.get("name", "unknown"),
+                                                    "tool_args": tool_call.get("args", {}),
+                                                    "subagent": node_name,
+                                                },
+                                            }
+
+                                # Tool result
+                                elif isinstance(msg, ToolMessage):
+                                    yield {
+                                        "type": "tool_result",
+                                        "data": {
+                                            "tool_name": getattr(msg, "name", "unknown"),
+                                            "result_summary": str(msg.content)[:200] + "..." if len(str(msg.content)) > 200 else str(msg.content),
+                                            "subagent": current_subagent,
+                                        },
+                                    }
+
+                # Extract final response from the streamed state (don't re-execute!)
+                final_response = ""
+                if final_state:
+                    # Get the last node's output
+                    for node_name, node_output in final_state.items():
+                        messages = node_output.get("messages", [])
+                        # Find the last AI message
+                        for msg in reversed(messages):
+                            if isinstance(msg, AIMessage):
+                                final_response = msg.content
+                                break
+                        if final_response:
+                            break
+
+                # If we didn't get a response from streaming, fall back to extracting from state
+                if not final_response and final_state:
+                    final_response = str(final_state)
+
+                yield {
+                    "type": "complete",
+                    "data": {
+                        "response": final_response,
+                        "session_id": effective_session_id,
+                        "metadata": {
+                            "agent_type": self.agent_subtype,
+                            "iterations": iteration,
+                        },
+                    },
+                }
+
+            else:
+                # Fallback: simulate streaming for non-streaming agents
+                yield {
+                    "type": "thinking",
+                    "data": {
+                        "iteration": 1,
+                        "phase": "planning",
+                        "summary": "Analyzing request...",
+                        "content": "Processing your query and formulating response.",
+                    },
+                }
+
+                # Execute chat in background
+                response_text = await asyncio.to_thread(
+                    self.chat,
+                    message,
+                    thread_id=effective_session_id,
+                )
+
+                # Yield complete event
+                yield {
+                    "type": "complete",
+                    "data": {
+                        "response": response_text,
+                        "session_id": effective_session_id,
+                    },
+                }
+
+        except Exception as e:
+            yield {
+                "type": "error",
+                "data": {
+                    "error": str(e),
+                    "session_id": effective_session_id,
+                },
+            }
+
     def add_sub_agent(self, config: SubAgentConfig) -> None:
         """Add a new sub-agent to the DeepAgent.
 

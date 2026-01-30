@@ -526,7 +526,7 @@ def run_tests(
 
 @tool
 def generate_test_data(
-    schema: str,
+    data_schema: str,
     count: int = 10,
     data_type: str = "realistic",
     session_id: str = "default",
@@ -539,7 +539,7 @@ def generate_test_data(
     - Random data for fuzz testing
 
     Args:
-        schema: JSON schema or description of data structure.
+        data_schema: JSON schema or description of data structure.
         count: Number of records to generate.
         data_type: Type of data - "realistic", "edge_case", "random".
         session_id: Session identifier.
@@ -554,7 +554,7 @@ def generate_test_data(
 
     # Parse schema
     try:
-        schema_dict = json.loads(schema)
+        schema_dict = json.loads(data_schema)
     except json.JSONDecodeError:
         schema_dict = {"type": "object", "properties": {"name": {"type": "string"}}}
 

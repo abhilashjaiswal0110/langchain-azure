@@ -108,6 +108,19 @@ notebooks/
 *_SUMMARY.md
 DOCUMENTATION_INDEX.md
 
+# Documentation - Root folder cleanup (use /docs instead)
+# Exclude temporary/working docs from root - keep organized docs in /docs/
+/*_GUIDE.md
+/*_TUTORIAL.md
+/*_NOTES.md
+/*_DRAFT.md
+/*_TODO.md
+/*_IDEAS.md
+/TROUBLESHOOTING*.md
+/SAMPLE*.md
+/QUERIES*.md
+/RESTART*.md
+
 # LangGraph and deployment
 .langgraph_api/
 deployment/server_log.txt
@@ -116,6 +129,8 @@ deployment/server_startup.log
 # Documentation (internal only)
 docs/ENHANCEMENT_PLAN.md
 docs/doctemplates/
+docs/drafts/
+docs/wip/
 
 # Package manager locks (platform-specific)
 uv.lock
