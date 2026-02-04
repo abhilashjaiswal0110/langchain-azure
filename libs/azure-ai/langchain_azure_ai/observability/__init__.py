@@ -29,7 +29,7 @@ import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
@@ -215,7 +215,7 @@ class ExecutionMetrics:
         agent_name: Name of the agent.
         agent_type: Type of the agent.
     """
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
     duration_ms: float = 0.0
     prompt_tokens: int = 0
@@ -229,7 +229,7 @@ class ExecutionMetrics:
     
     def finalize(self) -> None:
         """Finalize metrics calculation."""
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
         self.duration_ms = (self.end_time - self.start_time).total_seconds() * 1000
         self.total_tokens = self.prompt_tokens + self.completion_tokens
 

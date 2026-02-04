@@ -17,7 +17,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -86,7 +86,7 @@ class TeamsActivity:
             conversation_id=data.get("conversation", {}).get("id", ""),
             channel_id=data.get("channelId", "msteams"),
             service_url=data.get("serviceUrl", ""),
-            timestamp=data.get("timestamp", datetime.utcnow().isoformat()),
+            timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
             attachments=data.get("attachments", []),
             entities=data.get("entities", []),
             value=data.get("value", {}),
