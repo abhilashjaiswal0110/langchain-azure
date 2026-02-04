@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -392,7 +392,7 @@ def health_check(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(
         json.dumps({{
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "agents": len(AGENTS),
             "function_app": "{self.config.name}"
         }}),
@@ -436,7 +436,7 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
                 "response": response,
                 "agent": agent_name,
                 "session_id": session_id or "new",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }}),
             mimetype="application/json"
         )

@@ -20,7 +20,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -55,6 +55,8 @@ try:
         RequestLoggingMiddleware,
         TracingMiddleware,
         MetricsMiddleware,
+        RateLimitMiddleware,
+        RateLimitConfig,
     )
     OBSERVABILITY_AVAILABLE = True
     # Setup Azure Monitor at module load (enabled by default)
@@ -124,6 +126,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     agents_loaded: int
+    agents_initialized: bool
     azure_foundry_enabled: bool
 
 
@@ -475,18 +478,19 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
     # Startup
     logger.info("Starting Azure AI Foundry Agent Server...")
-    
-    # Load agents in background to avoid blocking startup
+
+    # Load agents synchronously to ensure they're ready before accepting requests
     async def load_agents_async():
         try:
             await asyncio.to_thread(load_agents)
             logger.info(f"Agent loading complete. Total agents: {registry.total_agents}")
         except Exception as e:
             logger.error(f"Error loading agents: {e}", exc_info=True)
-    
-    # Start agent loading but don't wait
-    asyncio.create_task(load_agents_async())
-    
+
+    # Wait for agent loading to complete before server starts accepting requests
+    await load_agents_async()
+    logger.info("Server ready to accept requests")
+
     yield
     # Shutdown
     logger.info("Shutting down Azure AI Foundry Agent Server...")
@@ -580,10 +584,23 @@ app.add_middleware(
 
 # Add observability middleware (if available)
 if OBSERVABILITY_AVAILABLE:
+    # Configure rate limiting with endpoint-specific limits
+    rate_limit_config = RateLimitConfig(
+        requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "60")),
+        burst_size=int(os.getenv("RATE_LIMIT_BURST", "10")),
+        endpoint_limits={
+            # Lower limits for expensive DeepAgent endpoints
+            "/api/deepagent/it_operations/chat": 30,
+            "/api/deepagent/sales_intelligence/chat": 30,
+            "/api/deepagent/recruitment/chat": 30,
+            "/api/deepagent/software_development/chat": 30,
+        },
+    )
+    app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(TracingMiddleware)
     app.add_middleware(RequestLoggingMiddleware, log_request_body=False)
-    logger.info("Observability middleware added to server")
+    logger.info("Observability and rate limiting middleware added to server")
 
 # Mount static files directory
 static_dir = Path(__file__).parent / "static"
@@ -602,9 +619,10 @@ if static_dir.exists():
 async def health_check():
     """Health check endpoint returning server status and agent count."""
     return HealthResponse(
-        status="healthy",
-        timestamp=datetime.utcnow().isoformat(),
+        status="healthy" if registry._initialized else "initializing",
+        timestamp=datetime.now(timezone.utc).isoformat(),
         agents_loaded=registry.total_agents,
+        agents_initialized=registry._initialized,
         azure_foundry_enabled=os.getenv("USE_AZURE_FOUNDRY", "true").lower() == "true",
     )
 
@@ -727,7 +745,7 @@ async def it_agent_chat(agent_name: str, request: ChatRequest):
             response=response,
             session_id=session_id,
             agent_type=f"IT/{getattr(agent, 'agent_subtype', 'unknown')}",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             metadata=request.metadata,
         )
     except Exception as e:
@@ -761,7 +779,7 @@ async def enterprise_agent_chat(agent_name: str, request: ChatRequest):
             response=response,
             session_id=session_id,
             agent_type=f"Enterprise/{getattr(agent, 'agent_subtype', 'unknown')}",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             metadata=request.metadata,
         )
     except Exception as e:
@@ -852,7 +870,7 @@ async def deep_agent_chat(agent_name: str, request: ChatRequest):
             response=response,
             session_id=session_id,
             agent_type=f"DeepAgent/{getattr(agent, 'agent_subtype', 'unknown')}",
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             metadata=request.metadata,
         )
     except Exception as e:

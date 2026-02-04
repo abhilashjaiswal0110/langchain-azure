@@ -640,6 +640,17 @@
             text-transform: capitalize;
         }
 
+        .agent-name {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-weight: 500;
+            font-family: 'Monaco', 'Menlo', monospace;
+            text-transform: lowercase;
+        }
+
         .thinking-content {
             background: #f9fafb;
             padding: 12px;
@@ -1285,6 +1296,7 @@
                     const content = data.content || '';
                     const summary = data.summary || data.message || `Step ${iteration}...`;
                     const isReasoning = data.is_reasoning_token || false;
+                    const agent = data.agent || 'agent';
 
                     thinkingStatus.innerHTML = `<strong>Step ${iteration}:</strong> ${summary}`;
                     thinkingBlocks.style.display = 'block';
@@ -1307,6 +1319,7 @@
                                 <span class="expand-icon">▶</span>
                                 <span class="thinking-summary">${escapeHtml(summary)}</span>
                                 <span class="thinking-phase">${phase}</span>
+                                <span class="agent-name">${escapeHtml(agent)}</span>
                                 <span class="thinking-badge ${isReasoning ? 'reasoning' : ''}">Step ${iteration}</span>
                             </div>
                             <div class="thinking-content">
@@ -1322,11 +1335,14 @@
 
                 case 'tool_start':
                     toolActivity.style.display = 'block';
+                    const toolAgent = data.agent || 'agent';
                     const toolEntry = document.createElement('div');
                     toolEntry.className = 'tool-entry executing';
+                    toolEntry.dataset.agent = toolAgent;
                     toolEntry.innerHTML = `
                         <span class="tool-icon">⚙</span>
                         <span class="tool-name">${data.tool}</span>
+                        <span class="agent-name">${escapeHtml(toolAgent)}</span>
                         <span class="tool-status">${data.description || 'Executing...'}</span>
                     `;
                     toolActivity.appendChild(toolEntry);
