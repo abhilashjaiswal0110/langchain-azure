@@ -34,6 +34,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DeepAgent Multi-Agent Routing**: Fixed critical bug where supervisor never delegated to sub-agents
+  - Implemented handoff tools pattern with `delegate_to_*` tools for proper routing
+  - Replaced broken conditional routing logic with tool-based delegation
+  - Added `task_complete` flag to prevent premature workflow termination
+  - Fixed supervisor node to properly detect finish_task signal
+- **Message Type Imports**: Fixed RuntimeError where AIMessage, HumanMessage, and ToolMessage were not imported
+  - Added missing imports to module level in deep_agents.py
+  - Removed redundant local imports for cleaner code
+  - All message types now available throughout the module
+- **DeepAgent Streaming**: Improved event streaming with XML/JSON filtering
+  - Switched to stream_mode="updates" for node-level event tracking
+  - Added agent attribution to streaming events
+  - Filtered out internal XML tags and JSON artifacts from user-facing output
+
+### Changed
+- **Rate Limiting Enhancement**: Implemented SHA-256 deterministic hashing for API key tracking
+  - Replaced Python hash() with SHA-256 for consistent rate limiting across processes
+  - Removed unused imports (asyncio, defaultdict, datetime.timezone)
+- **Pydantic V2 Migration**: Migrated SubAgentConfig and DeepAgentState to ConfigDict pattern
+- **Python 3.12+ Compatibility**: Replaced all datetime.utcnow() with datetime.now(timezone.utc)
+  - Fixed 9 occurrences across 4 files
+
 ### Added
 - Enterprise repository structure with comprehensive documentation
 - Production readiness certification (Software, Security, Data Architecture)
