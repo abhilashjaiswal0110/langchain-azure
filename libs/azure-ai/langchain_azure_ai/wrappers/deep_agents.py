@@ -30,7 +30,7 @@ from typing import (
 )
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
@@ -520,7 +520,6 @@ Maintain compliance and candidate experience throughout the process.""",
         """
         import uuid
         import asyncio
-        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
         effective_session_id = session_id or str(uuid.uuid4())
 
