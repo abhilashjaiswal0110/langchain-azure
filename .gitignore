@@ -86,6 +86,8 @@ server_startup.log
 nul
 scratch/
 *.tmp
+.tmp/
+tmpclaude-*
 
 # Data files
 data/
