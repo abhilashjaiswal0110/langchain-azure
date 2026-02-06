@@ -14,11 +14,44 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
+T = TypeVar("T")
+
+
+def _run_sync_resilience(coro: Coroutine[Any, Any, T]) -> T:
+    """Run async coroutine synchronously for resilience operations.
+
+    Properly handles the case when called from within an async context.
+
+    Args:
+        coro: Coroutine to run.
+
+    Returns:
+        Result of the coroutine.
+
+    Raises:
+        RuntimeError: If called from within an async context.
+    """
+    try:
+        asyncio.get_running_loop()
+        msg = (
+            "Cannot run sync wrapper from within an async context. "
+            "Use the async version of this function instead."
+        )
+        raise RuntimeError(msg)
+    except RuntimeError as e:
+        if "no running event loop" in str(e):
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        else:
+            raise
 
 
 class RetryStrategy(str, Enum):
@@ -552,10 +585,7 @@ class RetryHandler:
 
         @wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            loop = asyncio.get_event_loop()
-            return loop.run_until_complete(
-                self.execute(func, *args, **kwargs)
-            )
+            return _run_sync_resilience(self.execute(func, *args, **kwargs))
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper  # type: ignore
@@ -896,10 +926,7 @@ def with_resilience(
                 if not allowed:
                     raise RateLimitExceeded(retry_after)
 
-            loop = asyncio.get_event_loop()
-            return loop.run_until_complete(
-                retry_handler.execute(func, *args, **kwargs)
-            )
+            return _run_sync_resilience(retry_handler.execute(func, *args, **kwargs))
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper  # type: ignore

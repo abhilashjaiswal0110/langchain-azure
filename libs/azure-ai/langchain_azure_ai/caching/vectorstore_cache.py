@@ -6,9 +6,10 @@ costs and improve latency.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Type
+from typing import Any, Coroutine, List, Optional, Sequence, Type, TypeVar
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -21,6 +22,45 @@ from langchain_azure_ai.caching.semantic_cache import (
 )
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+def _run_sync(coro: Coroutine[Any, Any, T]) -> T:
+    """Run async coroutine synchronously.
+
+    Properly handles the case when called from within an async context
+    by raising a clear error.
+
+    Args:
+        coro: Coroutine to run.
+
+    Returns:
+        Result of the coroutine.
+
+    Raises:
+        RuntimeError: If called from within an async context.
+    """
+    try:
+        # Check if there's already a running loop
+        asyncio.get_running_loop()
+        # If we get here, we're in an async context
+        msg = (
+            "Cannot run sync method from within an async context. "
+            "Use the async version (e.g., asimilarity_search) instead."
+        )
+        raise RuntimeError(msg)
+    except RuntimeError as e:
+        if "no running event loop" in str(e):
+            # No running loop, safe to create one
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        else:
+            # Re-raise the "already running" error with our custom message
+            raise
 
 
 @dataclass
@@ -203,17 +243,7 @@ class CachedVectorStore(VectorStore):
         Returns:
             List of similar documents.
         """
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(
-            self.asimilarity_search(query, k=k, **kwargs)
-        )
+        return _run_sync(self.asimilarity_search(query, k=k, **kwargs))
 
     async def asimilarity_search_with_score(
         self,
@@ -263,17 +293,7 @@ class CachedVectorStore(VectorStore):
         **kwargs: Any,
     ) -> List[tuple[Document, float]]:
         """Similarity search with scores and caching."""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(
-            self.asimilarity_search_with_score(query, k=k, **kwargs)
-        )
+        return _run_sync(self.asimilarity_search_with_score(query, k=k, **kwargs))
 
     async def amax_marginal_relevance_search(
         self,
@@ -329,15 +349,7 @@ class CachedVectorStore(VectorStore):
         **kwargs: Any,
     ) -> List[Document]:
         """MMR search with caching."""
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(
+        return _run_sync(
             self.amax_marginal_relevance_search(
                 query, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, **kwargs
             )

@@ -522,23 +522,48 @@ class MultiModalDocumentPipeline:
 
         Args:
             source: Image source.
-            source_type: Source type.
+            source_type: Source type (local, url, base64).
 
         Returns:
-            Analysis result dictionary.
+            Analysis result dictionary with caption, tags, objects.
         """
         if self.image_analysis is None:
             return {}
 
         try:
-            result = self.image_analysis._run(source, source_type)
-            # Parse result if it's a string
+            # Map source_type to Azure AI Image Analysis expected values
+            # Azure tool expects: "path", "url", or "base64"
+            mapped_source_type = source_type
+            if source_type == "local":
+                mapped_source_type = "path"
+
+            result = self.image_analysis._run(source, mapped_source_type)
+
+            # Parse result - handle both string JSON and dict responses
             if isinstance(result, str):
-                return {"caption": result}
-            return result
+                # Try to parse as JSON first
+                try:
+                    import json
+                    parsed = json.loads(result)
+                    if isinstance(parsed, dict):
+                        return {
+                            "caption": parsed.get("caption", parsed.get("description", "")),
+                            "tags": parsed.get("tags", []),
+                            "objects": parsed.get("objects", []),
+                        }
+                except (json.JSONDecodeError, TypeError):
+                    # Treat as plain caption text
+                    return {"caption": result, "tags": [], "objects": []}
+            elif isinstance(result, dict):
+                return {
+                    "caption": result.get("caption", result.get("description", "")),
+                    "tags": result.get("tags", []),
+                    "objects": result.get("objects", []),
+                }
+            return {"caption": "", "tags": [], "objects": []}
         except Exception as e:
             logger.error(f"Image analysis error: {e}")
-            return {}
+            return {"caption": "", "tags": [], "objects": []}
 
     def _extract_tables(self, doc_result: dict[str, Any]) -> List[ExtractedTable]:
         """Extract tables from document analysis result.
@@ -557,10 +582,10 @@ class MultiModalDocumentPipeline:
         raw_tables = doc_result.get("tables", [])
         for i, table_data in enumerate(raw_tables):
             if isinstance(table_data, list):
-                # Already parsed as list of rows
+                # Already parsed as list of rows - page number unknown
                 table = ExtractedTable(
                     data=table_data,
-                    page_number=i + 1,
+                    page_number=None,  # Page number not available from raw list
                 )
                 tables.append(table)
             elif isinstance(table_data, dict):

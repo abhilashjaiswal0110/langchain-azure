@@ -604,10 +604,16 @@ class AlertManager:
         now = datetime.now(timezone.utc)
 
         for rule_name, rule in self._rules.items():
-            # Get current metric value
-            value = metrics.get_counter(rule.metric_name)
-            if value == 0:
-                value = metrics.get_gauge(rule.metric_name)
+            # Get current metric value - check if it exists as counter or gauge
+            key = metrics._make_key(rule.metric_name, rule.labels)
+
+            if key in metrics._counters:
+                value = metrics._counters[key]
+            elif key in metrics._gauges:
+                value = metrics._gauges[key]
+            else:
+                # Metric doesn't exist, skip this rule
+                continue
 
             # Check condition
             condition_met = self._check_condition(value, rule.condition, rule.threshold)
@@ -776,14 +782,18 @@ class MonitoringDashboard:
         """
         labels = {"agent": agent_name}
 
+        # Record both labeled (for detailed analysis) and unlabeled (for alert evaluation)
         self.metrics.increment("requests_total", labels=labels)
+        self.metrics.increment("requests_total")  # Unlabeled aggregate for alerts
         self.metrics.histogram("request_duration_ms", duration_ms, labels=labels)
 
         if not success:
             self.metrics.increment("errors_total", labels=labels)
+            self.metrics.increment("errors_total")  # Unlabeled aggregate for alerts
 
         if tokens > 0:
             self.metrics.increment("tokens_total", value=tokens, labels=labels)
+            self.metrics.increment("tokens_total", value=tokens)  # Unlabeled aggregate
 
     def record_cache_access(
         self,
