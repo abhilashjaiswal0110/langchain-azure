@@ -533,8 +533,28 @@ def trace_agent(
     return decorator
 
 
+# Import enhanced tracing
+from langchain_azure_ai.observability.tracing import (
+    EnhancedTracer,
+    SpanKind,
+    SpanAttributes,
+    SpanContext,
+    get_tracer as get_enhanced_tracer,
+    trace_function,
+)
+
+# Import middleware
+from langchain_azure_ai.observability.middleware import (
+    TracingMiddleware,
+    RequestLoggingMiddleware,
+    MetricsMiddleware,
+    RateLimitMiddleware,
+    RateLimitConfig,
+)
+
 # Export public API
 __all__ = [
+    # Core telemetry
     "TelemetryConfig",
     "ExecutionMetrics",
     "AgentTelemetry",
@@ -542,4 +562,17 @@ __all__ = [
     "get_tracer",
     "get_meter",
     "trace_agent",
+    # Enhanced tracing
+    "EnhancedTracer",
+    "SpanKind",
+    "SpanAttributes",
+    "SpanContext",
+    "get_enhanced_tracer",
+    "trace_function",
+    # Middleware
+    "TracingMiddleware",
+    "RequestLoggingMiddleware",
+    "MetricsMiddleware",
+    "RateLimitMiddleware",
+    "RateLimitConfig",
 ]
