@@ -1,0 +1,49 @@
+{
+  "name": "run-full-test",
+  "version": "1.0.0",
+  "description": "Run complete test suite with linting, formatting, and type checking",
+  "author": "LangChain Azure Team",
+  "category": "langchain-azure",
+  "tags": ["testing", "qa", "lint", "format", "mypy"],
+  "parameters": [
+    {
+      "name": "package",
+      "type": "choice",
+      "required": false,
+      "default": "all",
+      "choices": ["all", "azure-ai", "azure-dynamic-sessions", "sqlserver", "azure-storage", "azure-postgresql"],
+      "description": "Package to test (default: all)"
+    },
+    {
+      "name": "coverage",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Generate coverage report"
+    },
+    {
+      "name": "integration",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Run integration tests (requires Azure credentials)"
+    }
+  ],
+  "prerequisites": [
+    "Repository cloned",
+    "Poetry installed",
+    "Dependencies installed (poetry install --with test,lint,typing)",
+    "For integration tests: Azure credentials configured in .env"
+  ],
+  "outputs": [
+    "Test results in terminal",
+    "Coverage report in htmlcov/ (if coverage=true)",
+    "Test summary with pass/fail status"
+  ],
+  "examples": [
+    "/run-full-test",
+    "/run-full-test --package azure-ai",
+    "/run-full-test --package azure-ai --integration true",
+    "/run-full-test --coverage false"
+  ]
+}
