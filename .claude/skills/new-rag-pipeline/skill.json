@@ -1,0 +1,58 @@
+{
+  "name": "new-rag-pipeline",
+  "version": "1.0.0",
+  "description": "Create a complete RAG pipeline with Azure services",
+  "author": "LangChain Azure Team",
+  "category": "langchain-azure",
+  "tags": ["rag", "retrieval", "embeddings", "vectorstore"],
+  "parameters": [
+    {
+      "name": "pipeline_name",
+      "type": "string",
+      "required": true,
+      "description": "Name of the RAG pipeline (kebab-case, e.g., 'docs-qa')",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    {
+      "name": "storage",
+      "type": "choice",
+      "required": false,
+      "default": "search",
+      "choices": ["search", "cosmos", "postgresql"],
+      "description": "Vector storage backend"
+    },
+    {
+      "name": "embeddings",
+      "type": "choice",
+      "required": false,
+      "default": "azure",
+      "choices": ["azure", "openai"],
+      "description": "Embeddings provider"
+    },
+    {
+      "name": "with_web_ui",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Include web UI for testing"
+    }
+  ],
+  "prerequisites": [
+    "Repository cloned",
+    "Azure AI Search or Cosmos DB or PostgreSQL credentials",
+    "Azure OpenAI or OpenAI API key",
+    "Sample documents for testing"
+  ],
+  "outputs": [
+    "samples/rag-{pipeline_name}/",
+    "samples/rag-{pipeline_name}/pipeline.py",
+    "samples/rag-{pipeline_name}/query.py",
+    "samples/rag-{pipeline_name}/embed.py",
+    "samples/rag-{pipeline_name}/README.md"
+  ],
+  "examples": [
+    "/new-rag-pipeline docs-qa",
+    "/new-rag-pipeline knowledge-base --storage cosmos --embeddings azure",
+    "/new-rag-pipeline support-docs --storage postgresql --with_web_ui false"
+  ]
+}
