@@ -1,0 +1,72 @@
+{
+  "name": "create-enterprise-hub",
+  "version": "1.0.0",
+  "description": "Create end-to-end enterprise multi-agent hub with Teams, Copilot Studio, and Azure Functions deployment",
+  "author": "LangChain Azure Team",
+  "category": "langchain-azure-enterprise",
+  "tags": ["multi-agent", "enterprise", "teams", "copilot-studio", "azure-functions"],
+  "parameters": [
+    {
+      "name": "hub_name",
+      "type": "string",
+      "required": true,
+      "description": "Name of the enterprise hub (e.g., 'it-support-hub', 'customer-service-hub')",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    {
+      "name": "use_case",
+      "type": "choice",
+      "required": false,
+      "default": "it-support",
+      "choices": ["it-support", "customer-service", "doc-intelligence", "custom"],
+      "description": "Predefined use case template"
+    },
+    {
+      "name": "agents",
+      "type": "string",
+      "required": false,
+      "description": "Comma-separated list of agents to create (e.g., 'helpdesk,rag,servicenow')"
+    },
+    {
+      "name": "deploy_to",
+      "type": "string",
+      "required": false,
+      "default": "all",
+      "description": "Deployment targets: 'teams', 'copilot', 'functions', 'all'"
+    },
+    {
+      "name": "with_rag",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Include RAG knowledge base"
+    },
+    {
+      "name": "with_monitoring",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Include Azure Monitor + LangSmith tracing"
+    }
+  ],
+  "prerequisites": [
+    "Repository cloned",
+    "Azure AI Project endpoint configured",
+    "Azure credentials (for enterprise connectors)",
+    "Teams app registration (for Teams deployment)",
+    "M365 Copilot license (for Copilot Studio deployment)"
+  ],
+  "outputs": [
+    "samples/enterprise-{hub_name}/",
+    "samples/enterprise-{hub_name}/agents/",
+    "samples/enterprise-{hub_name}/orchestrator.py",
+    "samples/enterprise-{hub_name}/deploy/teams/",
+    "samples/enterprise-{hub_name}/deploy/copilot/",
+    "samples/enterprise-{hub_name}/deploy/functions/"
+  ],
+  "examples": [
+    "/create-enterprise-hub it-support-hub --use_case it-support",
+    "/create-enterprise-hub customer-service --agents support,faq,ticketing --deploy_to teams",
+    "/create-enterprise-hub doc-intelligence --with_rag true --deploy_to all"
+  ]
+}
