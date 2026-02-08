@@ -1,0 +1,62 @@
+{
+  "name": "new-agent",
+  "version": "1.0.0",
+  "description": "Create a new LangChain agent with Azure AI integration",
+  "author": "LangChain Azure Team",
+  "category": "langchain-azure",
+  "tags": ["agent", "azure-ai", "langchain", "scaffold"],
+  "parameters": [
+    {
+      "name": "agent_name",
+      "type": "string",
+      "required": true,
+      "description": "Name of the agent (kebab-case, e.g., 'customer-support')",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    {
+      "name": "type",
+      "type": "choice",
+      "required": false,
+      "default": "react",
+      "choices": ["react", "openai", "conversational", "custom"],
+      "description": "Type of agent to create"
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "required": false,
+      "default": "gpt-4o",
+      "description": "Azure AI model to use (e.g., 'gpt-4o', 'claude-3-5-sonnet', 'deepseek-r1')"
+    },
+    {
+      "name": "with_memory",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Include conversation memory (Cosmos DB)"
+    },
+    {
+      "name": "with_tools",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "description": "Include sample tools"
+    }
+  ],
+  "prerequisites": [
+    "Repository cloned and in langchain-azure directory",
+    "Poetry installed",
+    "Python 3.10+",
+    "libs/azure-ai package structure exists"
+  ],
+  "outputs": [
+    "libs/azure-ai/langchain_azure_ai/agents/{agent_name}.py",
+    "tests/unit_tests/agents/test_{agent_name}.py",
+    "Updated: libs/azure-ai/langchain_azure_ai/agents/__init__.py"
+  ],
+  "examples": [
+    "/new-agent customer-support",
+    "/new-agent helpdesk --type react --model gpt-4o --with_memory true",
+    "/new-agent data-analyst --type openai --with_tools false"
+  ]
+}
