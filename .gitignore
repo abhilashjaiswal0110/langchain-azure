@@ -43,6 +43,10 @@ virtualenv/
 # IDE and editors
 .vs/
 .claude/
+# Allow Claude Agent SDK skills and documentation
+!.claude/skills/
+!.claude/*.md
+!.claude/CLAUDE.md
 .idea/
 .vscode/settings.json
 .vscode/.ropeproject/
