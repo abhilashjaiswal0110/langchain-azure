@@ -50,8 +50,8 @@
     "libs/azure-ai package structure exists"
   ],
   "outputs": [
-    "libs/azure-ai/langchain_azure_ai/agents/{agent_name}.py",
-    "libs/azure-ai/tests/unit_tests/agents/test_{agent_name}.py",
+    "libs/azure-ai/langchain_azure_ai/agents/{agent_name_snake}.py (agent_name converted to snake_case)",
+    "libs/azure-ai/tests/unit_tests/agents/test_{agent_name_snake}.py (agent_name converted to snake_case)",
     "Updated: libs/azure-ai/langchain_azure_ai/agents/__init__.py"
   ],
   "examples": [

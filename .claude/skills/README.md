@@ -333,8 +333,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for full guidelines.
 
 ### Support
 - 📧 Email: abhilashjaiswal0110@gmail.com
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/langchain-azure/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/langchain-azure/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/abhilashjaiswal0110/langchain-azure/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/abhilashjaiswal0110/langchain-azure/discussions)
 
 ---
 
@@ -350,6 +350,6 @@ Skills inherit the repository license (MIT).
 
 Made with ❤️ for the LangChain Azure community
 
-[Report Bug](https://github.com/yourusername/langchain-azure/issues) • [Request Skill](https://github.com/yourusername/langchain-azure/issues/new?labels=enhancement,skills)
+[Report Bug](https://github.com/abhilashjaiswal0110/langchain-azure/issues) • [Request Skill](https://github.com/abhilashjaiswal0110/langchain-azure/issues/new?labels=enhancement,skills)
 
 </div>

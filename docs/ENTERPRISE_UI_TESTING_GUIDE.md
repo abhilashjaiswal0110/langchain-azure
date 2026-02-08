@@ -50,7 +50,9 @@
 **Expected Response:**
 - First routes to knowledge_base for documentation
 - If no solution, escalates to servicenow for ticket creation
-- Provides comprehensive response with both steps### Customer Service Hub
+- Provides comprehensive response with both steps
+
+### Customer Service Hub
 
 #### Test 1: Order Status (Should route to: support)
 **Prompt:**

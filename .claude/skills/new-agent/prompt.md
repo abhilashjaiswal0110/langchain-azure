@@ -47,21 +47,25 @@ If any validation fails, **STOP** and inform the user.
 
 ### Step 1: Convert Agent Name
 
-Convert kebab-case to various formats:
-- **kebab-case**: "customer-support" (for filenames)
-- **snake_case**: "customer_support" (for Python identifiers)
+Convert kebab-case input to various formats:
+- **Input format**: "customer-support" (kebab-case from user)
+- **snake_case**: "customer_support" (for Python filenames and identifiers)
 - **PascalCase**: "CustomerSupport" (for class names)
 - **Title Case**: "Customer Support" (for documentation)
 
 Example:
 - Input: "it-helpdesk-agent"
-- snake_case: "it_helpdesk_agent"
+- snake_case: "it_helpdesk_agent" (used for filename)
 - PascalCase: "ItHelpdeskAgent"
 - Title: "IT Helpdesk Agent"
 
+**IMPORTANT**: Python module filenames must use snake_case, not kebab-case. Convert all hyphens to underscores for filenames.
+
 ### Step 2: Create Agent File
 
-Create: `libs/azure-ai/langchain_azure_ai/agents/{agent_name}.py`
+Create: `libs/azure-ai/langchain_azure_ai/agents/{snake_case}.py`
+
+**Note**: Use snake_case for the filename, not kebab-case.
 
 Use the template based on the agent type:
 

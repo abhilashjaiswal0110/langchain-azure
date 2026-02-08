@@ -36,15 +36,17 @@ echo "🧪 Running unit tests..."
 poetry run pytest tests/unit_tests/ -v --tb=short
 
 # Integration tests (if integration=true)
-if [[ integration == true ]]; then
+if [[ "$integration" == "true" ]]; then
     echo "🔗 Running integration tests..."
-    poetry run pytest tests/integration_tests/ -v --tb=short --run-integration
+    poetry run pytest tests/integration_tests/ -v --tb=short --integration
 fi
 
 # Coverage (if coverage=true)
-if [[ coverage == true ]]; then
+if [[ "$coverage" == "true" ]]; then
     echo "📊 Generating coverage report..."
-    poetry run pytest tests/ --cov=langchain_{package_name} --cov-report=html --cov-report=term
+    # Convert package name hyphens to underscores for Python module name
+    module_name=$(echo "langchain_${package_name}" | tr '-' '_')
+    poetry run pytest tests/ --cov="$module_name" --cov-report=html --cov-report=term
 fi
 ```
 
@@ -66,7 +68,9 @@ poetry run ruff format --check .
 
 ```bash
 echo "🔬 Running type checker..."
-poetry run mypy langchain_{package_name}/
+# Convert package name hyphens to underscores for Python module name
+module_name=$(echo "langchain_${package_name}" | tr '-' '_')
+poetry run mypy "$module_name"/
 ```
 
 ## Output Summary
