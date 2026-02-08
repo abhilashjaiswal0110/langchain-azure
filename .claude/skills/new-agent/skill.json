@@ -51,7 +51,7 @@
   ],
   "outputs": [
     "libs/azure-ai/langchain_azure_ai/agents/{agent_name}.py",
-    "tests/unit_tests/agents/test_{agent_name}.py",
+    "libs/azure-ai/tests/unit_tests/agents/test_{agent_name}.py",
     "Updated: libs/azure-ai/langchain_azure_ai/agents/__init__.py"
   ],
   "examples": [

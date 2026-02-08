@@ -44,9 +44,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import based on storage choice
 {% if storage == "search" %}
-from langchain_azure_ai.vectorstores import AzureAISearchVectorStore
+from langchain_azure_ai.vectorstores import AzureSearch
 {% elif storage == "cosmos" %}
-from langchain_azure_ai.vectorstores import AzureCosmosDBVectorStore
+from langchain_azure_ai.vectorstores import AzureCosmosDBNoSqlVectorSearch
 {% elif storage == "postgresql" %}
 from langchain_azure_postgresql.vectorstores import AzurePostgreSQLVectorStore
 {% endif %}
@@ -102,12 +102,12 @@ class {{PascalCase}}Pipeline:
     def _get_default_vectorstore(self) -> VectorStore:
         """Get default vector store."""
         {% if storage == "search" %}
-        return AzureAISearchVectorStore(
+        return AzureSearch(
             index_name="{{pipeline_name}}",
             embedding_function=self.embeddings,
         )
         {% elif storage == "cosmos" %}
-        return AzureCosmosDBVectorStore(
+        return AzureCosmosDBNoSqlVectorSearch(
             collection_name="{{pipeline_name}}",
             embedding=self.embeddings,
         )

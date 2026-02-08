@@ -212,9 +212,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import appropriate vectorstore based on storage choice
 {% if storage == "search" %}
-from langchain_azure_ai.vectorstores import AzureAISearchVectorStore
+from langchain_azure_ai.vectorstores import AzureSearch
 {% elif storage == "cosmos" %}
-from langchain_azure_ai.vectorstores import AzureCosmosDBVectorStore
+from langchain_azure_ai.vectorstores import AzureCosmosDBNoSqlVectorSearch
 {% elif storage == "postgresql" %}
 from langchain_azure_postgresql.vectorstores import AzurePostgreSQLVectorStore
 {% endif %}
@@ -231,7 +231,7 @@ class {{PascalCase}}RAG:
             model="text-embedding-3-large"
         )
 
-        self.vectorstore = {% if storage == "search" %}AzureAISearchVectorStore{% elif storage == "cosmos" %}AzureCosmosDBVectorStore{% elif storage == "postgresql" %}AzurePostgreSQLVectorStore{% endif %}(
+        self.vectorstore = {% if storage == "search" %}AzureSearch{% elif storage == "cosmos" %}AzureCosmosDBNoSqlVectorSearch{% elif storage == "postgresql" %}AzurePostgreSQLVectorStore{% endif %}(
             {% if storage == "search" %}index_name="{{hub_name}}_{{agent_name}}",{% elif storage == "cosmos" %}collection_name="{{hub_name}}_{{agent_name}}",{% elif storage == "postgresql" %}collection_name="{{hub_name}}_{{agent_name}}",{% endif %}
             embedding{% if storage == "search" %}_function{% endif %}=self.embeddings,
         )
@@ -867,14 +867,8 @@ langchain-azure-ai>=0.1.0
 langchain-openai>=0.1.0
 langchain-core>=0.3.0
 langgraph>=0.2.0
-{% if with_rag %}
-{% if storage == "search" %}
-langchain-azure-search>=0.1.0
-{% elif storage == "cosmos" %}
-langchain-azure-cosmos>=0.1.0
-{% elif storage == "postgresql" %}
+{% if with_rag and storage == "postgresql" %}
 langchain-azure-postgresql>=0.1.0
-{% endif %}
 {% endif %}
 azure-identity>=1.15.0
 azure-ai-projects>=1.0.0

@@ -327,10 +327,6 @@ class Test{{PascalCase}}Agent:
 class TestIntegration{{PascalCase}}Agent:
     """Integration tests for {{Title}} Agent (requires Azure credentials)."""
 
-    @pytest.mark.skipif(
-        "not config.getoption('--run-integration')",
-        reason="Integration tests require --run-integration flag",
-    )
     def test_agent_with_real_model(self) -> None:
         """Test agent with real Azure AI model."""
         agent = create_{{snake_case}}_agent()
@@ -482,7 +478,7 @@ After successful execution, provide this summary to the user:
 📋 Next Steps:
 1. Review the generated agent code
 2. Customize the system message and tools
-3. Run integration tests: pytest --run-integration tests/unit_tests/agents/test_{{agent_name}}.py
+3. Run integration tests: pytest --integration libs/azure-ai/tests/unit_tests/agents/test_{{agent_name}}.py
 4. Update documentation with specific use cases
 5. Set up Azure credentials in .env file
 

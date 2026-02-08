@@ -29,10 +29,11 @@
     },
     {
       "name": "deploy_to",
-      "type": "string",
+      "type": "choice",
       "required": false,
       "default": "all",
-      "description": "Deployment targets: 'teams', 'copilot', 'functions', 'all'"
+      "choices": ["teams", "copilot", "functions", "all"],
+      "description": "Deployment targets"
     },
     {
       "name": "with_rag",
