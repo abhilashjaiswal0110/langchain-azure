@@ -33,7 +33,7 @@ Enterprise-grade LangChain integration packages for Microsoft Azure, enabling pr
 
 # Quick Start with langchain-azure-ai
 
-The `langchain-azure-ai` package uses the [Azure AI Foundry SDK](https://learn.microsoft.com/en-us/azure/ai-studio/how-to/develop/sdk-overview?tabs=sync&pivots=programming-language-python). This means you can use the package with a range of models including AzureOpenAI, Cohere, Llama, Phi-3/4, and DeepSeek-R1 to name a few. 
+The `langchain-azure-ai` package uses the [Azure AI Foundry SDK](https://learn.microsoft.com/en-us/azure/ai-studio/how-to/develop/sdk-overview?tabs=sync&pivots=programming-language-python). This means you can use the package with a range of models including AzureOpenAI, Cohere, Llama, Phi-3/4, and DeepSeek-R1 to name a few.
 
 
 LangChain Azure AI also contains:
@@ -50,7 +50,7 @@ Here's a quick start example to show you how to get started with the Chat Comple
 pip install -U langchain-azure-ai
 ```
 
-### Azure AI Chat Completions Model with Azure OpenAI 
+### Azure AI Chat Completions Model with Azure OpenAI
 
 ```python
 
@@ -130,7 +130,7 @@ response = agent.chat(
 - `response_length`: Output metrics
 - Custom metadata fields
 
-### Azure AI Chat Completions Model with DeepSeek-R1 
+### Azure AI Chat Completions Model with DeepSeek-R1
 
 ```python
 
@@ -152,11 +152,11 @@ print(' '.join(chunk.content for chunk in message_stream))
 ```
 
 ```python
- <think> 
- Okay ,  the  user  just  sent  " hi !"  and  I  need  to  translate  that  into  Italian .  Let  me  think .  " Hi "  is  an  informal  greeting ,  so  in  Italian ,  the  equivalent  would  be  " C iao !"  But  wait ,  there  are  other  options  too .  Sometimes  people  use  " Sal ve ,"  which  is  a  bit  more  neutral ,  but  " C iao "  is  more  common  in  casual  settings .  The  user  probably  wants  a  straightforward  translation ,  so  " C iao !"  is  the  safest  bet  here .  Let  me  double -check  to  make  sure  there 's  no  nuance  I 'm  missing .  N ope ,  " C iao "  is  definitely  the  right  choice  for  translating  " hi !"  in  an  informal  context .  I 'll  go  with  that . 
- </think> 
+ <think>
+ Okay ,  the  user  just  sent  " hi !"  and  I  need  to  translate  that  into  Italian .  Let  me  think .  " Hi "  is  an  informal  greeting ,  so  in  Italian ,  the  equivalent  would  be  " C iao !"  But  wait ,  there  are  other  options  too .  Sometimes  people  use  " Sal ve ,"  which  is  a  bit  more  neutral ,  but  " C iao "  is  more  common  in  casual  settings .  The  user  probably  wants  a  straightforward  translation ,  so  " C iao !"  is  the  safest  bet  here .  Let  me  double -check  to  make  sure  there 's  no  nuance  I 'm  missing .  N ope ,  " C iao "  is  definitely  the  right  choice  for  translating  " hi !"  in  an  informal  context .  I 'll  go  with  that .
+ </think>
 
- C iao ! 
+ C iao !
 ```
 
 ## LangGraph and Azure AI Agent Service
@@ -219,11 +219,11 @@ builder.add_node("coder", coder_node)
 
 ## Using LangChain Azure AI with init_chat_model
 
-To use LangChain Azure AI with `init_chat_model` you must set the "AZURE_AI_ENDPOINT" and "AZURE_AI_CREDENTIAL" environment variables. 
+To use LangChain Azure AI with `init_chat_model` you must set the "AZURE_AI_ENDPOINT" and "AZURE_AI_CREDENTIAL" environment variables.
 
-```python 
+```python
 from langchain.chat_models import init_chat_model
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 load_dotenv()
 
 os.environ["AZURE_AI_ENDPOINT"] = os.getenv("AZURE_ENDPOINT")
@@ -259,6 +259,24 @@ connector.create_m365_copilot_plugin(
     api_base_url="https://your-api.example.com"
 )
 ```
+
+### Copilot Studio REST API (New!)
+
+The server includes ready-to-use REST API endpoints for Microsoft Copilot Studio custom connectors:
+
+**Endpoints:**
+- `GET /api/copilot/openapi.json` - OpenAPI 2.0 (Swagger) specification for custom connector import
+- `GET /.well-known/ai-plugin.json` - AI plugin manifest for Microsoft 365 Copilot
+- `POST /api/copilot/chat` - Main chat endpoint with automatic agent routing
+- `POST /api/copilot/chat/{agent_id}` - Direct chat with specific agent
+- `GET /api/copilot/agents` - List available agents and capabilities
+
+**Setup in Copilot Studio:**
+1. Import custom connector from: `https://your-app.azurecontainerapps.io/api/copilot/openapi.json`
+2. Configure API Key authentication (X-API-Key header)
+3. Create topics using the Chat action
+
+📖 **See [Copilot Studio Integration Guide](./docs/COPILOT_STUDIO_INTEGRATION.md)** for complete setup instructions.
 
 ### Microsoft Teams Bot Integration
 
@@ -330,14 +348,14 @@ Pull requests cannot land without passing the formatting, linting, and testing c
 
 It's essential that we maintain great documentation and testing. If you:
 - Fix a bug
-  - Add a relevant unit or integration test when possible. 
+  - Add a relevant unit or integration test when possible.
 - Make an improvement
   - Update unit and integration tests when relevant.
 - Add a feature
   - Add unit and integration tests.
 
 If there's something you'd like to add or change, opening a pull request is the
-best way to get our attention. Please tag one of our maintainers for review. 
+best way to get our attention. Please tag one of our maintainers for review.
 
 ## Dependency Management: Poetry and other env/dependency managers
 
@@ -516,7 +534,7 @@ If you add support for a new external API, please add a new integration test.
 
 **Warning:** Almost no tests should be integration tests.
 
-  Tests that require making network connections make it difficult for other 
+  Tests that require making network connections make it difficult for other
   developers to test the code.
 
   Instead favor relying on `responses` library and/or mock.patch to mock
