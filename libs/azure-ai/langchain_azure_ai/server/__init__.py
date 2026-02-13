@@ -9,6 +9,8 @@ Endpoints:
 - /api/conversation/ - IT agent endpoints
 - /api/enterprise/{agent_type}/ - Enterprise agent endpoints
 - /api/deepagent/{agent_type}/ - DeepAgent endpoints
+- /api/copilot/* - Microsoft Copilot Studio integration endpoints
+- /.well-known/ai-plugin.json - Plugin manifest for Copilot discovery
 - /health - Health check endpoint
 - /agents - List available agents
 """
@@ -86,7 +88,7 @@ class ChatRequest(BaseModel):
     user_id: Optional[str] = Field(None, description="User ID")
     stream: bool = Field(False, description="Whether to stream the response")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-    
+
     def get_telemetry_context(self) -> Dict[str, str]:
         """Extract telemetry context from request."""
         context = {}
@@ -393,7 +395,7 @@ def load_agents():
 
 def load_additional_agents():
     """Load additional agents on demand.
-    
+
     Call this to load all remaining agents after initial startup.
     """
     from langchain_azure_ai.wrappers import (
@@ -484,6 +486,15 @@ async def lifespan(app: FastAPI):
         try:
             await asyncio.to_thread(load_agents)
             logger.info(f"Agent loading complete. Total agents: {registry.total_agents}")
+
+            # Set the registry for Copilot Studio routes
+            try:
+                from langchain_azure_ai.server.copilot_studio import set_registry as set_copilot_registry
+                set_copilot_registry(registry)
+                logger.info("✓ Copilot Studio registry configured")
+            except ImportError:
+                pass
+
         except Exception as e:
             logger.error(f"Error loading agents: {e}", exc_info=True)
 
@@ -521,6 +532,14 @@ tags_metadata = [
     {
         "name": "chat",
         "description": "Chat UI and streaming endpoints",
+    },
+    {
+        "name": "copilot-studio",
+        "description": "Microsoft Copilot Studio integration endpoints for custom connectors and plugins",
+    },
+    {
+        "name": "evaluation",
+        "description": "Agent evaluation and metrics endpoints",
     },
 ]
 
@@ -607,6 +626,26 @@ static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Mount Copilot Studio integration routes
+try:
+    from langchain_azure_ai.server.copilot_studio import router as copilot_router
+    from langchain_azure_ai.server.copilot_studio import well_known_router
+    from langchain_azure_ai.server.copilot_studio import set_registry as set_copilot_registry
+
+    # Mount the Copilot Studio API routes
+    app.include_router(copilot_router)
+    app.include_router(well_known_router)
+
+    # Set the registry after load_agents() is called (done in lifespan)
+    COPILOT_STUDIO_AVAILABLE = True
+    logger.info("✓ Copilot Studio integration routes mounted")
+    logger.info("  - Plugin manifest: /.well-known/ai-plugin.json")
+    logger.info("  - OpenAPI spec: /api/copilot/openapi.json")
+    logger.info("  - Chat endpoint: /api/copilot/chat")
+except ImportError as e:
+    COPILOT_STUDIO_AVAILABLE = False
+    logger.warning(f"Copilot Studio routes not available: {e}")
+
 
 # Health check endpoint
 @app.get(
@@ -667,7 +706,7 @@ async def chat_ui():
     static_file = Path(__file__).parent / "static" / "chat.html"
     if static_file.exists():
         return FileResponse(static_file, media_type="text/html")
-    
+
     # Fallback minimal HTML
     html_content = """
     <!DOCTYPE html>
@@ -834,7 +873,7 @@ async def deep_agent_chat(agent_name: str, request: ChatRequest):
 
     session_id = request.session_id or str(uuid.uuid4())
     user_id = request.user_id or "anonymous"
-    
+
     # Initialize telemetry if available
     telemetry = None
     if OBSERVABILITY_AVAILABLE:
@@ -842,9 +881,9 @@ async def deep_agent_chat(agent_name: str, request: ChatRequest):
             agent_name=f"deepagent_{agent_name}",
             agent_type="DeepAgent"
         )
-    
+
     start_time = time.time()
-    
+
     try:
         # Track execution with telemetry
         if telemetry:
@@ -859,13 +898,13 @@ async def deep_agent_chat(agent_name: str, request: ChatRequest):
                 metrics.custom_attributes["response_length"] = len(response)
         else:
             response = agent.chat(request.message, thread_id=session_id)
-        
+
         duration_ms = (time.time() - start_time) * 1000
         logger.info(
             f"DeepAgent '{agent_name}' completed request in {duration_ms:.2f}ms "
             f"(session: {session_id}, user: {user_id})"
         )
-        
+
         return ChatResponse(
             response=response,
             session_id=session_id,
@@ -948,10 +987,10 @@ async def deep_agent_chat_stream(agent_name: str, request: ChatRequest):
         try:
             # Start event
             yield f"data: {json.dumps({'type': 'start', 'data': {'message': 'Processing your request...', 'session_id': session_id}})}\n\n"
-            
+
             iteration = 0
             response_text = ""
-            
+
             # Check if agent has streaming capability
             if hasattr(agent, 'astream_chat'):
                 # Use native streaming if available
@@ -965,19 +1004,19 @@ async def deep_agent_chat_stream(agent_name: str, request: ChatRequest):
                 # Send thinking event
                 iteration += 1
                 yield f"data: {json.dumps({'type': 'thinking', 'data': {'iteration': iteration, 'phase': 'planning', 'summary': 'Analyzing request...', 'content': 'Processing your query and formulating response.'}})}\n\n"
-                
+
                 await asyncio.sleep(0.1)
-                
+
                 # Get response from agent without blocking the event loop
                 response_text = await asyncio.to_thread(
                     agent.chat,
                     request.message,
                     thread_id=session_id,
                 )
-                
+
                 # Send complete event
                 yield f"data: {json.dumps({'type': 'complete', 'data': {'response': response_text, 'session_id': session_id}})}\n\n"
-        
+
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'data': {'error': str(e)}})}\n\n"
@@ -1000,11 +1039,11 @@ async def deep_agent_todos(agent_name: str, session_id: str):
     agent = registry.get_deep_agent(agent_name)
     if not agent:
         return {"todos": []}
-    
+
     # Try to get todos from agent if it supports it
     if hasattr(agent, 'get_todos'):
         return {"todos": agent.get_todos(session_id)}
-    
+
     return {"todos": []}
 
 
@@ -1014,11 +1053,11 @@ async def deep_agent_files(agent_name: str, session_id: str):
     agent = registry.get_deep_agent(agent_name)
     if not agent:
         return {"files": []}
-    
+
     # Try to get files from agent if it supports it
     if hasattr(agent, 'get_files'):
         return {"files": agent.get_files(session_id)}
-    
+
     return {"files": []}
 
 
@@ -1082,7 +1121,7 @@ async def enterprise_agent_upload(
         # Read file content
         content = await file.read()
         filename = file.filename
-        
+
         # Check if agent has upload capability
         if hasattr(agent, 'upload_file'):
             result = agent.upload_file(content, filename, session_id)
@@ -1121,7 +1160,7 @@ async def deep_agent_upload(
         # Read file content
         content = await file.read()
         filename = file.filename
-        
+
         # Check if agent has upload capability
         if hasattr(agent, 'upload_file'):
             result = agent.upload_file(content, filename, session_id)
