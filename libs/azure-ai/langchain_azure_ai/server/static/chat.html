@@ -769,6 +769,9 @@
         <div class="header">
             <h1>Azure AI Foundry Agents</h1>
             <div class="agent-selector">
+                <span class="status-badge" id="copilotBadge" title="Copilot Studio Integration" style="background: #f0f0f0; color: #666; cursor: pointer;" onclick="showCopilotInfo()">
+                    <span class="status-dot" style="background: #888;"></span> Copilot Studio
+                </span>
                 <span class="status-badge disconnected" id="statusBadge">
                     <span class="status-dot red"></span> Disconnected
                 </span>
@@ -788,7 +791,7 @@
                     <div class="welcome-screen" id="welcomeScreen">
                         <h2>Welcome to Azure AI Foundry Agents</h2>
                         <p>Select an agent below to start a conversation. Each agent is specialized for different tasks.</p>
-                        
+
                         <div style="width: 100%;">
                             <!-- IT Agents -->
                             <div class="agent-category">
@@ -1082,7 +1085,7 @@
                 return;
             }
 
-            quickActions.innerHTML = actions.map(action => 
+            quickActions.innerHTML = actions.map(action =>
                 `<div class="quick-action" onclick="sendQuickAction('${action}')">${action}</div>`
             ).join('');
         }
@@ -1091,9 +1094,9 @@
         function updateSubagentsPanel(agentName) {
             const subagentsList = document.getElementById('subagentsList');
             const config = subagentConfigs[agentName];
-            
+
             if (config) {
-                subagentsList.innerHTML = config.map(sa => 
+                subagentsList.innerHTML = config.map(sa =>
                     `<span class="subagent-badge" style="background: ${sa.color}; color: ${sa.textColor};">${sa.name}</span>`
                 ).join('');
             }
@@ -1614,6 +1617,88 @@
         function handleKeyPress(event) {
             if (event.key === 'Enter') sendMessage();
         }
+
+        // Copilot Studio Integration Status
+        let copilotStatus = 'unknown';
+
+        async function checkCopilotStatus() {
+            const copilotBadge = document.getElementById('copilotBadge');
+            if (!copilotBadge) return;
+
+            try {
+                const response = await fetch('/api/copilot/agents', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    copilotStatus = 'ready';
+                    copilotBadge.style.background = '#dcfce7';
+                    copilotBadge.style.color = '#166534';
+                    copilotBadge.innerHTML = '<span class="status-dot" style="background: #22c55e;"></span> Copilot Ready';
+                    copilotBadge.title = `Copilot Studio: ${data.agents?.length || 0} agents available`;
+                } else if (response.status === 401) {
+                    copilotStatus = 'secured';
+                    copilotBadge.style.background = '#dbeafe';
+                    copilotBadge.style.color = '#1e40af';
+                    copilotBadge.innerHTML = '<span class="status-dot" style="background: #3b82f6;"></span> Copilot Secured';
+                    copilotBadge.title = 'Copilot Studio: API Key authentication required';
+                } else {
+                    copilotStatus = 'error';
+                    copilotBadge.style.background = '#fee2e2';
+                    copilotBadge.style.color = '#991b1b';
+                    copilotBadge.innerHTML = '<span class="status-dot" style="background: #ef4444;"></span> Copilot Error';
+                }
+            } catch (error) {
+                copilotStatus = 'unavailable';
+                copilotBadge.style.background = '#f0f0f0';
+                copilotBadge.style.color = '#666';
+                copilotBadge.innerHTML = '<span class="status-dot" style="background: #888;"></span> Copilot N/A';
+                copilotBadge.title = 'Copilot Studio endpoints not available';
+            }
+        }
+
+        function showCopilotInfo() {
+            const baseUrl = window.location.origin;
+            const infoHtml = `
+                <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                            background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+                            max-width: 600px; width: 90%; z-index: 1000;">
+                    <h2 style="margin-bottom: 16px; color: #0078d4;">🔗 Copilot Studio Integration</h2>
+                    <p style="margin-bottom: 12px;">Connect this agent system to Microsoft Copilot Studio as a custom connector.</p>
+
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                        <strong>Plugin Manifest:</strong><br>
+                        <code style="word-break: break-all;">${baseUrl}/.well-known/ai-plugin.json</code>
+                    </div>
+
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                        <strong>OpenAPI Spec (Swagger 2.0):</strong><br>
+                        <code style="word-break: break-all;">${baseUrl}/api/copilot/openapi.json</code>
+                    </div>
+
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                        <strong>Status:</strong> ${copilotStatus === 'ready' ? '✅ Ready' : copilotStatus === 'secured' ? '🔒 Secured (API Key required)' : '⚠️ ' + copilotStatus}
+                    </div>
+
+                    <div style="text-align: right;">
+                        <button onclick="this.parentElement.parentElement.remove(); document.getElementById('copilotOverlay').remove();"
+                                style="padding: 8px 16px; background: #0078d4; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                            Close
+                        </button>
+                    </div>
+                </div>
+                <div id="copilotOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"
+                     onclick="this.nextElementSibling?.remove(); this.remove();"></div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', infoHtml);
+        }
+
+        // Check Copilot status on page load
+        window.addEventListener('load', () => {
+            checkCopilotStatus();
+        });
     </script>
 </body>
 </html>
