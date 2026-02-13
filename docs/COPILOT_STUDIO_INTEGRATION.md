@@ -184,7 +184,7 @@ Use the provided Bicep templates for production deployment:
 cd infra
 
 # Deploy using PowerShell (Windows)
-.\deploy.ps1 -ResourceGroupName "rg-copilot-agents" `
+.\deploy.ps1 -ResourceGroup "rg-copilot-agents" `
              -Location "eastus" `
              -Environment "prod"
 

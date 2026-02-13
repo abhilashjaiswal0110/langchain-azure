@@ -17,8 +17,6 @@ References:
 - https://learn.microsoft.com/microsoft-365-copilot/extensibility/overview-api-plugins
 """
 
-import hashlib
-import hmac
 import json
 import logging
 import os
@@ -26,10 +24,9 @@ import secrets
 import time
 import uuid
 from datetime import datetime, timezone
-from functools import wraps
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -52,13 +49,14 @@ def get_copilot_telemetry(agent_id: str = "copilot-studio") -> Optional["AgentTe
     """Get telemetry instance for Copilot Studio operations."""
     if not OBSERVABILITY_AVAILABLE:
         return None
-    return AgentTelemetry(
-        agent_name=agent_id,
-        custom_dimensions={
+    telemetry = AgentTelemetry(agent_name=agent_id)
+    # Attach custom dimensions after initialization
+    if hasattr(telemetry, "custom_dimensions") and isinstance(telemetry.custom_dimensions, dict):
+        telemetry.custom_dimensions.update({
             "source": "copilot_studio",
             "integration": "custom_connector"
-        }
-    )
+        })
+    return telemetry
 
 
 # ============================================================================
@@ -136,6 +134,7 @@ class CopilotChatRequest(BaseModel):
     userId: Optional[str] = Field(None, description="User identifier")
     locale: str = Field("en-US", description="User locale for response formatting")
     channelId: str = Field("copilot", description="Channel identifier (copilot, teams, web)")
+    agentHint: Optional[str] = Field(None, description="Preferred agent ID (optional hint for routing)")
 
     class Config:
         schema_extra = {
@@ -175,12 +174,18 @@ class CopilotChatResponse(BaseModel):
 
 class AgentCapability(BaseModel):
     """Describes an agent's capability for Copilot discovery."""
-    name: str = Field(..., description="Agent name")
-    displayName: str = Field(..., description="Human-readable name")
+    id: str = Field(..., description="Agent ID")
+    name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Agent description for LLM understanding")
     type: str = Field(..., description="Agent type (IT, Enterprise, DeepAgent)")
-    operations: List[str] = Field(..., description="Supported operations")
+    capabilities: List[str] = Field(..., description="Supported operations")
     triggerPhrases: List[str] = Field(default_factory=list, description="Phrases that invoke this agent")
+
+
+class AgentListResponse(BaseModel):
+    """Response model for agent list endpoint."""
+    agents: List[AgentCapability] = Field(..., description="List of available agents")
+    total: int = Field(..., description="Total number of agents")
 
 
 class PluginManifest(BaseModel):
@@ -238,7 +243,6 @@ async def get_plugin_manifest(request: Request):
     automatic discovery and invocation.
     """
     base_url = str(request.base_url).rstrip("/")
-    tenant_id = os.getenv("AZURE_TENANT_ID", "common")
 
     manifest = {
         "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.1/schema.json",
@@ -268,7 +272,7 @@ async def get_plugin_manifest(request: Request):
             "type": "api_key" if security_config.api_key_enabled else "none",
             "api_key_header": "X-API-Key"
         },
-        "logo_url": f"{base_url}/static/logo.png",
+        "logo_url": os.getenv("COPILOT_LOGO_URL", f"{base_url}/static/logo.png"),
         "contact_email": os.getenv("COPILOT_CONTACT_EMAIL", "support@azure.microsoft.com"),
         "legal_info_url": os.getenv("COPILOT_LEGAL_URL", "https://azure.microsoft.com/terms/"),
         "capabilities": {
@@ -465,12 +469,9 @@ async def get_openapi_spec(request: Request):
                     "x-ms-visibility": "advanced",
                     "responses": {
                         "200": {
-                            "description": "List of agents",
+                            "description": "List of agents with total count",
                             "schema": {
-                                "type": "array",
-                                "items": {
-                                    "$ref": "#/definitions/AgentInfo"
-                                }
+                                "$ref": "#/definitions/AgentListResponse"
                             }
                         }
                     }
@@ -510,14 +511,49 @@ async def get_openapi_spec(request: Request):
             },
             "AgentInfo": {
                 "type": "object",
+                "required": ["id", "name", "description", "type", "capabilities"],
                 "properties": {
-                    "name": {"type": "string"},
-                    "displayName": {"type": "string"},
-                    "description": {"type": "string"},
-                    "type": {"type": "string"},
-                    "operations": {
+                    "id": {
+                        "type": "string",
+                        "description": "Agent ID"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable name"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Agent description for LLM understanding"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "Agent type (IT, Enterprise, DeepAgent)"
+                    },
+                    "capabilities": {
                         "type": "array",
-                        "items": {"type": "string"}
+                        "items": {"type": "string"},
+                        "description": "Supported operations"
+                    },
+                    "triggerPhrases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Phrases that invoke this agent",
+                        "default": []
+                    }
+                }
+            },
+            "AgentListResponse": {
+                "type": "object",
+                "required": ["agents", "total"],
+                "properties": {
+                    "agents": {
+                        "type": "array",
+                        "items": {"$ref": "#/definitions/AgentInfo"},
+                        "description": "List of available agents"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "description": "Total number of agents"
                     }
                 }
             },
@@ -576,7 +612,7 @@ async def copilot_chat(
     """Main chat endpoint for Copilot Studio integration.
 
     This endpoint:
-    1. Routes messages to the appropriate agent based on content
+    1. Routes messages to the appropriate agent based on content or agentHint
     2. Maintains conversation context via conversationId
     3. Returns structured responses with suggestions
     """
@@ -585,8 +621,25 @@ async def copilot_chat(
     conversation_id = request.conversationId or str(uuid.uuid4())
     start_time = time.time()
 
-    # Determine best agent based on message content
-    agent_id, agent_type = _route_to_agent(request.message, registry)
+    # Prefer agentHint if provided and valid, otherwise use keyword routing
+    agent_id: Optional[str] = None
+    agent_type: Optional[str] = None
+
+    if request.agentHint:
+        # Try to resolve the agent hint
+        if registry.get_it_agent(request.agentHint):
+            agent_id = request.agentHint
+            agent_type = "IT"
+        elif registry.get_enterprise_agent(request.agentHint):
+            agent_id = request.agentHint
+            agent_type = "Enterprise"
+        elif registry.get_deep_agent(request.agentHint):
+            agent_id = request.agentHint
+            agent_type = "DeepAgent"
+
+    # Fall back to keyword-based routing if hint doesn't resolve
+    if not agent_id or not agent_type:
+        agent_id, agent_type = _route_to_agent(request.message, registry)
 
     # Initialize telemetry for this request
     telemetry = get_copilot_telemetry(f"copilot-{agent_id}")
@@ -653,10 +706,12 @@ async def copilot_chat(
     except Exception as e:
         if telemetry:
             telemetry.record_error(str(e))
+        # Log full error details internally
         logger.error(f"Error in Copilot chat: {e}", exc_info=True)
+        # Return generic error to client (don't expose internal details)
         raise HTTPException(
             status_code=500,
-            detail=f"Agent processing error: {str(e)}"
+            detail="An error occurred while processing your request. Please try again or contact support."
         )
 
 
@@ -710,8 +765,13 @@ async def copilot_chat_specific(
         )
 
     except Exception as e:
+        # Log full details internally
         logger.error(f"Error in Copilot chat with {agent_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return generic error
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while processing your request. Please try again or contact support."
+        )
 
 
 # ============================================================================
@@ -720,7 +780,7 @@ async def copilot_chat_specific(
 
 @router.get(
     "/agents",
-    response_model=List[AgentCapability],
+    response_model=AgentListResponse,
     summary="List Available Agents",
     description="Get a list of all available agents with their capabilities.",
 )
@@ -733,104 +793,104 @@ async def list_copilot_agents(auth: str = Depends(verify_api_key)):
     # IT Agents
     it_agent_configs = {
         "helpdesk": {
-            "displayName": "IT Helpdesk",
+            "name": "IT Helpdesk",
             "description": "General IT support for password resets, software issues, hardware problems, and technical questions.",
             "triggerPhrases": ["IT help", "password reset", "computer issue", "tech support", "VPN problem"]
         },
         "servicenow": {
-            "displayName": "ServiceNow Integration",
+            "name": "ServiceNow Integration",
             "description": "Create and manage ServiceNow tickets, incidents, and service requests.",
             "triggerPhrases": ["create ticket", "ServiceNow", "incident", "service request", "ticket status"]
         },
         "hitl_support": {
-            "displayName": "Human Escalation",
+            "name": "Human Escalation",
             "description": "Escalate complex issues to human support agents.",
             "triggerPhrases": ["talk to human", "escalate", "agent transfer", "supervisor"]
         },
     }
 
-    for name, config in it_agent_configs.items():
-        if registry.get_it_agent(name):
+    for agent_id, config in it_agent_configs.items():
+        if registry.get_it_agent(agent_id):
             agents.append(AgentCapability(
-                name=name,
-                displayName=config["displayName"],
+                id=agent_id,
+                name=config["name"],
                 description=config["description"],
                 type="IT",
-                operations=["chat", "analyze"],
+                capabilities=["password_reset", "software_request", "ticket_status"],
                 triggerPhrases=config["triggerPhrases"]
             ))
 
     # Enterprise Agents
     enterprise_agent_configs = {
         "research": {
-            "displayName": "Research Assistant",
+            "name": "Research Assistant",
             "description": "Research topics, gather information, and provide analysis.",
             "triggerPhrases": ["research", "find information", "look up", "analyze topic"]
         },
         "content": {
-            "displayName": "Content Creator",
+            "name": "Content Creator",
             "description": "Create, edit, and improve written content, documents, and communications.",
             "triggerPhrases": ["write content", "create document", "edit text", "improve writing"]
         },
         "data_analyst": {
-            "displayName": "Data Analyst",
+            "name": "Data Analyst",
             "description": "Analyze data, create visualizations, and provide statistical insights.",
             "triggerPhrases": ["analyze data", "create chart", "statistics", "data insights"]
         },
         "code_assistant": {
-            "displayName": "Code Assistant",
+            "name": "Code Assistant",
             "description": "Help with coding, debugging, code review, and programming questions.",
             "triggerPhrases": ["write code", "debug", "programming help", "code review"]
         },
     }
 
-    for name, config in enterprise_agent_configs.items():
-        if registry.get_enterprise_agent(name):
+    for agent_id, config in enterprise_agent_configs.items():
+        if registry.get_enterprise_agent(agent_id):
             agents.append(AgentCapability(
-                name=name,
-                displayName=config["displayName"],
+                id=agent_id,
+                name=config["name"],
                 description=config["description"],
                 type="Enterprise",
-                operations=["chat", "analyze", "generate"],
+                capabilities=["content_generation", "data_analysis", "code_review"],
                 triggerPhrases=config["triggerPhrases"]
             ))
 
     # DeepAgents
     deep_agent_configs = {
         "it_operations": {
-            "displayName": "IT Operations",
+            "name": "IT Operations",
             "description": "Comprehensive IT operations management including incidents, changes, and infrastructure.",
             "triggerPhrases": ["system status", "infrastructure", "deployment", "monitoring"]
         },
         "sales_intelligence": {
-            "displayName": "Sales Intelligence",
+            "name": "Sales Intelligence",
             "description": "Sales analytics, deal qualification, competitive analysis, and pipeline insights.",
             "triggerPhrases": ["sales data", "deal analysis", "pipeline", "customer insights"]
         },
         "recruitment": {
-            "displayName": "Recruitment Assistant",
+            "name": "Recruitment Assistant",
             "description": "Support hiring processes including resume screening, interview preparation, and candidate evaluation.",
             "triggerPhrases": ["candidates", "resume", "interview questions", "hiring"]
         },
         "software_development": {
-            "displayName": "Software Development",
+            "name": "Software Development",
             "description": "Full software development lifecycle support from requirements to deployment.",
             "triggerPhrases": ["requirements", "architecture", "testing", "deployment", "SDLC"]
         },
     }
 
-    for name, config in deep_agent_configs.items():
-        if registry.get_deep_agent(name):
+    for agent_id, config in deep_agent_configs.items():
+        if registry.get_deep_agent(agent_id):
             agents.append(AgentCapability(
-                name=name,
-                displayName=config["displayName"],
+                id=agent_id,
+                name=config["name"],
                 description=config["description"],
                 type="DeepAgent",
-                operations=["chat", "execute_workflow", "analyze"],
+                capabilities=["requirements", "design", "coding", "testing", "deployment"],
                 triggerPhrases=config["triggerPhrases"]
             ))
 
-    return agents
+    return AgentListResponse(agents=agents, total=len(agents))
 
 
 # ============================================================================

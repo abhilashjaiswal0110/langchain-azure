@@ -103,8 +103,22 @@ echo ""
 echo "[2/6] Setting up Copilot API key..."
 
 if [ -z "$COPILOT_API_KEY" ]; then
-    COPILOT_API_KEY=$(openssl rand -hex 32)
-    echo "  ✓ Generated secure API key"
+    # Try openssl first, then fall back to Python
+    if command -v openssl >/dev/null 2>&1; then
+        COPILOT_API_KEY=$(openssl rand -hex 32)
+        echo "  ✓ Generated secure API key using openssl"
+    elif command -v python3 >/dev/null 2>&1; then
+        COPILOT_API_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+        echo "  ✓ Generated secure API key using python3"
+    elif command -v python >/dev/null 2>&1; then
+        COPILOT_API_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+        echo "  ✓ Generated secure API key using python"
+    else
+        echo "  ✗ Unable to generate COPILOT_API_KEY: neither 'openssl' nor 'python' is available."
+        echo "    Please install 'openssl' or 'python', or set COPILOT_API_KEY manually and re-run this script."
+        exit 1
+    fi
+    
     echo ""
     echo "  IMPORTANT: Save this API key securely!"
     echo "  COPILOT_API_KEY=$COPILOT_API_KEY"
@@ -156,11 +170,26 @@ if [ "$SKIP_DEPLOY" = false ]; then
 
     echo "  ✓ Infrastructure deployed successfully"
 
-    # Get outputs
-    CONTAINER_APP_URL=$(echo "$DEPLOYMENT" | jq -r '.properties.outputs.containerAppUrl.value')
-    PLUGIN_MANIFEST_URL=$(echo "$DEPLOYMENT" | jq -r '.properties.outputs.copilotPluginManifestUrl.value')
-    OPENAPI_URL=$(echo "$DEPLOYMENT" | jq -r '.properties.outputs.copilotOpenApiUrl.value')
-    ACR_LOGIN_SERVER=$(echo "$DEPLOYMENT" | jq -r '.properties.outputs.acrLoginServer.value')
+    # Get outputs using az query (no jq dependency)
+    CONTAINER_APP_URL=$(az deployment group show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
+        --query 'properties.outputs.containerAppUrl.value' -o tsv 2>/dev/null || echo "")
+    
+    PLUGIN_MANIFEST_URL=$(az deployment group show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
+        --query 'properties.outputs.copilotPluginManifestUrl.value' -o tsv 2>/dev/null || echo "")
+    
+    OPENAPI_URL=$(az deployment group show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
+        --query 'properties.outputs.copilotOpenApiUrl.value' -o tsv 2>/dev/null || echo "")
+    
+    ACR_LOGIN_SERVER=$(az deployment group show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
+        --query 'properties.outputs.acrLoginServer.value' -o tsv 2>/dev/null || echo "")
 fi
 
 # ============================================================================

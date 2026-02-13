@@ -210,7 +210,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
     name: environment == 'prod' ? 'Standard' : 'Basic'
   }
   properties: {
-    adminUserEnabled: true
+    adminUserEnabled: false
     publicNetworkAccess: enablePublicAccess ? 'Enabled' : 'Disabled'
   }
   tags: {
@@ -283,8 +283,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         corsPolicy: {
           allowedOrigins: [
             'https://copilotstudio.microsoft.com'
-            'https://*.microsoft.com'
-            'https://*.azure.com'
+            'https://web.powerva.microsoft.com'
+            // Note: Add your specific Power Platform tenant URLs here
+            // Example: 'https://your-tenant.api.powerplatform.com'
           ]
           allowedMethods: ['GET', 'POST', 'OPTIONS']
           allowedHeaders: ['*']
@@ -376,7 +377,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'CORS_ORIGINS'
-              value: 'https://copilotstudio.microsoft.com,https://*.microsoft.com'
+              value: 'https://copilotstudio.microsoft.com,https://web.powerva.microsoft.com'
             }
           ]
           probes: [

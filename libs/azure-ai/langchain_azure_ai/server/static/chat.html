@@ -1633,11 +1633,13 @@
 
                 if (response.ok) {
                     const data = await response.json();
+                    // Handle both array format (legacy) and object format (current)
+                    const agentCount = data.total || (Array.isArray(data) ? data.length : (data.agents?.length || 0));
                     copilotStatus = 'ready';
                     copilotBadge.style.background = '#dcfce7';
                     copilotBadge.style.color = '#166534';
                     copilotBadge.innerHTML = '<span class="status-dot" style="background: #22c55e;"></span> Copilot Ready';
-                    copilotBadge.title = `Copilot Studio: ${data.agents?.length || 0} agents available`;
+                    copilotBadge.title = `Copilot Studio: ${agentCount} agents available`;
                 } else if (response.status === 401) {
                     copilotStatus = 'secured';
                     copilotBadge.style.background = '#dbeafe';
@@ -1690,7 +1692,7 @@
                     </div>
                 </div>
                 <div id="copilotOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"
-                     onclick="this.nextElementSibling?.remove(); this.remove();"></div>
+                     onclick="this.previousElementSibling?.remove(); this.remove();"></div>
             `;
             document.body.insertAdjacentHTML('beforeend', infoHtml);
         }

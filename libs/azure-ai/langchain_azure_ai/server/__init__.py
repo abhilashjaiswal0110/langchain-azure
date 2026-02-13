@@ -492,8 +492,12 @@ async def lifespan(app: FastAPI):
                 from langchain_azure_ai.server.copilot_studio import set_registry as set_copilot_registry
                 set_copilot_registry(registry)
                 logger.info("✓ Copilot Studio registry configured")
-            except ImportError:
-                pass
+            except ImportError as exc:
+                # Copilot Studio integration is optional; log and continue if unavailable
+                logger.warning(
+                    "Copilot Studio integration is not available (failed to import): %s",
+                    exc,
+                )
 
         except Exception as e:
             logger.error(f"Error loading agents: {e}", exc_info=True)
@@ -630,13 +634,12 @@ if static_dir.exists():
 try:
     from langchain_azure_ai.server.copilot_studio import router as copilot_router
     from langchain_azure_ai.server.copilot_studio import well_known_router
-    from langchain_azure_ai.server.copilot_studio import set_registry as set_copilot_registry
 
     # Mount the Copilot Studio API routes
     app.include_router(copilot_router)
     app.include_router(well_known_router)
 
-    # Set the registry after load_agents() is called (done in lifespan)
+    # Registry will be set in lifespan() after agents are loaded
     COPILOT_STUDIO_AVAILABLE = True
     logger.info("✓ Copilot Studio integration routes mounted")
     logger.info("  - Plugin manifest: /.well-known/ai-plugin.json")
