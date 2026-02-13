@@ -43,6 +43,7 @@ All project documentation organized by topic:
 
 ```
 docs/
+├── COPILOT_STUDIO_INTEGRATION.md         # Microsoft Copilot Studio integration guide
 ├── DEEPAGENTS_EVALUATION_RESULTS.md      # DeepAgents test results
 ├── EVALUATION_FRAMEWORK_COMPLETE.md      # Evaluation framework guide
 ├── EVALUATION_IMPLEMENTATION.md          # Implementation details
@@ -94,6 +95,8 @@ libs/
 - **Agent Implementations**: `libs/azure-ai/langchain_azure_ai/agents/`
 - **Evaluation Framework**: `libs/azure-ai/langchain_azure_ai/evaluation/`
 - **API Server**: `libs/azure-ai/langchain_azure_ai/server/__init__.py`
+- **Copilot Studio Integration**: `libs/azure-ai/langchain_azure_ai/server/copilot_studio.py`
+- **Azure Deployment**: `infra/` (Bicep templates, deployment scripts)
 
 ---
 
