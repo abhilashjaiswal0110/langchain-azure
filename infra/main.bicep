@@ -61,6 +61,13 @@ param copilotApiKey string = ''
 @description('Enable public access (set false for private networking)')
 param enablePublicAccess bool = true
 
+@description('LangSmith API key for tracing (optional - enables dual observability)')
+@secure()
+param langsmithApiKey string = ''
+
+@description('LangSmith project name for organizing traces')
+param langsmithProject string = 'langchain-agents'
+
 @description('Minimum number of replicas')
 @minValue(0)
 @maxValue(10)
@@ -172,6 +179,14 @@ resource secretCopilotApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if
   name: 'copilot-api-key'
   properties: {
     value: copilotApiKey
+  }
+}
+
+resource secretLangsmithApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(langsmithApiKey)) {
+  parent: keyVault
+  name: 'langsmith-api-key'
+  properties: {
+    value: langsmithApiKey
   }
 }
 
@@ -314,6 +329,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'appinsights-connection'
           value: appInsights.properties.ConnectionString
         }
+        {
+          name: 'langsmith-api-key'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langsmith-api-key'
+          identity: managedIdentity.id
+        }
       ]
     }
     template: {
@@ -361,7 +381,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'COPILOT_API_KEY'
               secretRef: 'copilot-api-key'
             }
-            // Observability
+            // Observability - Azure Monitor (Application Insights)
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               secretRef: 'appinsights-connection'
@@ -369,6 +389,19 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'ENABLE_AZURE_MONITOR'
               value: 'true'
+            }
+            // Observability - LangSmith (Dual Tracing)
+            {
+              name: 'LANGCHAIN_TRACING_V2'
+              value: empty(langsmithApiKey) ? 'false' : 'true'
+            }
+            {
+              name: 'LANGCHAIN_API_KEY'
+              secretRef: 'langsmith-api-key'
+            }
+            {
+              name: 'LANGCHAIN_PROJECT'
+              value: langsmithProject
             }
             // Server Configuration
             {

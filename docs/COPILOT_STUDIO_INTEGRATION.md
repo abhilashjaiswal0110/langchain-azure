@@ -498,6 +498,7 @@ curl https://your-app.azurecontainerapps.io/.well-known/ai-plugin.json
 |----------|--------|-------------|
 | `/api/copilot/chat` | POST | Main chat endpoint with auto-routing |
 | `/api/copilot/chat/{agent_id}` | POST | Direct chat with specific agent |
+| `/api/copilot/document` | POST | **Document processing endpoint** (summarize, extract, analyze) |
 | `/api/copilot/agents` | GET | List available agents |
 | `/api/copilot/openapi.json` | GET | OpenAPI 2.0 specification |
 | `/api/copilot/plugin-manifest` | GET | AI plugin manifest |
@@ -567,6 +568,68 @@ GET /api/copilot/agents
 }
 ```
 
+### Document Processing Request
+
+Process documents for summarization, text extraction, table extraction, or analysis.
+
+**Supported Operations:**
+- `summarize` - AI-powered document summarization
+- `extract_text` - Full text extraction
+- `extract_tables` - Table extraction (markdown format)
+- `extract_key_values` - Key-value pair extraction
+- `analyze` - Comprehensive document analysis
+
+**Supported Formats:** PDF, DOCX, PPTX, XLSX, PNG, JPG
+
+```json
+POST /api/copilot/document
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "documentContent": "JVBERi0xLjQK...",  // Base64-encoded document
+  "documentName": "quarterly_report.pdf",
+  "operation": "summarize",
+  "conversationId": "conv-123",
+  "options": {
+    "max_length": 500,
+    "format": "bullet_points"
+  }
+}
+```
+
+**Alternative: URL-based document:**
+
+```json
+{
+  "documentUrl": "https://storage.example.com/report.pdf",
+  "documentName": "report.pdf",
+  "operation": "summarize"
+}
+```
+
+### Document Processing Response
+
+```json
+{
+  "response": "## Executive Summary\n\n- Revenue increased 15% YoY\n- Customer satisfaction at 92%\n- New product launches on track...",
+  "conversationId": "conv-123",
+  "operation": "summarize",
+  "documentName": "quarterly_report.pdf",
+  "timestamp": "2026-02-26T10:30:00Z",
+  "metadata": {
+    "pages_processed": 12,
+    "tables_found": 3,
+    "processing_time_ms": 2500
+  },
+  "suggestions": [
+    "Extract all tables from this document",
+    "Analyze key financial metrics",
+    "Compare with previous quarter"
+  ]
+}
+```
+
 ---
 
 ## Support
@@ -586,7 +649,9 @@ For issues and questions:
 | 1.0.0 | 2024-01 | Initial Copilot Studio integration |
 | 1.1.0 | 2024-02 | Added Deep Agents support |
 | 1.2.0 | 2024-02 | Enhanced observability & security |
+| 2.0.0 | 2026-02 | **Document Processing Endpoint** - CPS can now send documents for AI summarization and extraction |
+| 2.0.1 | 2026-02 | **Dual Observability** - LangSmith + Azure App Insights tracing for all operations |
 
 ---
 
-*Last updated: February 2024*
+*Last updated: February 2026*

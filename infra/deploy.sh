@@ -118,7 +118,7 @@ if [ -z "$COPILOT_API_KEY" ]; then
         echo "    Please install 'openssl' or 'python', or set COPILOT_API_KEY manually and re-run this script."
         exit 1
     fi
-    
+
     echo ""
     echo "  IMPORTANT: Save this API key securely!"
     echo "  COPILOT_API_KEY=$COPILOT_API_KEY"
@@ -157,6 +157,16 @@ if [ "$SKIP_DEPLOY" = false ]; then
         DEPLOY_PARAMS="$DEPLOY_PARAMS azureOpenAIKey=$AZURE_OPENAI_API_KEY"
     fi
 
+    # LangSmith dual observability (optional)
+    if [ -n "$LANGCHAIN_API_KEY" ]; then
+        DEPLOY_PARAMS="$DEPLOY_PARAMS langsmithApiKey=$LANGCHAIN_API_KEY"
+        echo "  ✓ LangSmith dual tracing enabled"
+    fi
+
+    if [ -n "$LANGCHAIN_PROJECT" ]; then
+        DEPLOY_PARAMS="$DEPLOY_PARAMS langsmithProject=$LANGCHAIN_PROJECT"
+    fi
+
     DEPLOYMENT=$(az deployment group create \
         --resource-group "$RESOURCE_GROUP" \
         --template-file main.bicep \
@@ -175,17 +185,17 @@ if [ "$SKIP_DEPLOY" = false ]; then
         --resource-group "$RESOURCE_GROUP" \
         --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
         --query 'properties.outputs.containerAppUrl.value' -o tsv 2>/dev/null || echo "")
-    
+
     PLUGIN_MANIFEST_URL=$(az deployment group show \
         --resource-group "$RESOURCE_GROUP" \
         --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
         --query 'properties.outputs.copilotPluginManifestUrl.value' -o tsv 2>/dev/null || echo "")
-    
+
     OPENAPI_URL=$(az deployment group show \
         --resource-group "$RESOURCE_GROUP" \
         --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
         --query 'properties.outputs.copilotOpenApiUrl.value' -o tsv 2>/dev/null || echo "")
-    
+
     ACR_LOGIN_SERVER=$(az deployment group show \
         --resource-group "$RESOURCE_GROUP" \
         --name "$(az deployment group list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv)" \
@@ -240,4 +250,18 @@ echo ""
 echo "Environment Variables for .env:"
 echo "  COPILOT_API_KEY=$COPILOT_API_KEY"
 echo "  AZURE_CONTAINER_APP_URL=$CONTAINER_APP_URL"
+echo ""
+echo "Observability Configuration:"
+echo "  Azure App Insights: Enabled (auto-configured)"
+if [ -n "$LANGCHAIN_API_KEY" ]; then
+    echo "  LangSmith Tracing: Enabled"
+    echo "  LangSmith Project: ${LANGCHAIN_PROJECT:-langchain-agents}"
+else
+    echo "  LangSmith Tracing: Disabled (set LANGCHAIN_API_KEY to enable)"
+fi
+echo ""
+echo "Document Processing Endpoint:"
+echo "  POST $CONTAINER_APP_URL/api/copilot/document"
+echo "  - Supports: summarize, extract_text, extract_tables, analyze"
+echo "  - Accepts: base64 content or URL"
 echo ""

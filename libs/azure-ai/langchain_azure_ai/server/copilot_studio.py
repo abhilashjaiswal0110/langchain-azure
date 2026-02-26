@@ -17,13 +17,17 @@ References:
 - https://learn.microsoft.com/microsoft-365-copilot/extensibility/overview-api-plugins
 """
 
+import base64
 import json
 import logging
 import os
 import secrets
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -213,6 +217,97 @@ class HealthStatus(BaseModel):
 
 
 # ============================================================================
+# Document Processing Models (Copilot Studio Compatible)
+# ============================================================================
+
+class DocumentOperation(str, Enum):
+    """Supported document operations."""
+    SUMMARIZE = "summarize"
+    EXTRACT_TEXT = "extract_text"
+    EXTRACT_TABLES = "extract_tables"
+    EXTRACT_KEY_VALUES = "extract_key_values"
+    ANALYZE = "analyze"
+
+
+class CopilotDocumentRequest(BaseModel):
+    """Document processing request model for Copilot Studio.
+
+    Supports multiple input methods: base64 content, URL, or file path.
+    """
+    documentContent: Optional[str] = Field(
+        None,
+        description="Base64-encoded document content"
+    )
+    documentUrl: Optional[str] = Field(
+        None,
+        description="URL to the document (must be publicly accessible or pre-authenticated)"
+    )
+    documentName: Optional[str] = Field(
+        None,
+        description="Original filename for type detection"
+    )
+    operation: str = Field(
+        "summarize",
+        description="Operation to perform: summarize, extract_text, extract_tables, extract_key_values, analyze"
+    )
+    conversationId: Optional[str] = Field(
+        None,
+        description="Conversation ID for context continuity"
+    )
+    userId: Optional[str] = Field(
+        None,
+        description="User identifier"
+    )
+    options: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional processing options (max_length, language, format)"
+    )
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "documentContent": "JVBERi0xLjQK...",  # Base64 PDF
+                "documentName": "quarterly_report.pdf",
+                "operation": "summarize",
+                "conversationId": "conv-12345",
+                "options": {"max_length": 500, "format": "bullet_points"}
+            }
+        }
+
+
+class CopilotDocumentResponse(BaseModel):
+    """Document processing response for Copilot Studio."""
+    response: str = Field(..., description="Processed result (summary, extracted text, etc.)")
+    conversationId: str = Field(..., description="Conversation ID for follow-up")
+    operation: str = Field(..., description="Operation that was performed")
+    documentName: Optional[str] = Field(None, description="Processed document name")
+    timestamp: str = Field(..., description="ISO 8601 timestamp")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    suggestions: List[str] = Field(default_factory=list, description="Follow-up suggestions")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "response": "## Executive Summary\n\nThe quarterly report shows...",
+                "conversationId": "conv-12345",
+                "operation": "summarize",
+                "documentName": "quarterly_report.pdf",
+                "timestamp": "2026-02-26T10:30:00Z",
+                "metadata": {
+                    "pages_processed": 12,
+                    "tables_found": 3,
+                    "processing_time_ms": 2500
+                },
+                "suggestions": [
+                    "Extract all tables from this document",
+                    "Analyze key financial metrics",
+                    "Compare with previous quarter"
+                ]
+            }
+        }
+
+
+# ============================================================================
 # Router Setup
 # ============================================================================
 
@@ -251,18 +346,15 @@ async def get_plugin_manifest(request: Request):
         "name_for_model": "azure_ai_foundry_agents",
         "description_for_human": "Enterprise AI agents for IT support, business intelligence, and automation powered by Azure AI Foundry and LangChain.",
         "description_for_model": (
-            "Use this plugin to interact with enterprise AI agents. "
-            "Available agent types: IT Helpdesk (password resets, technical support), "
-            "ServiceNow (ticket creation, incident management), "
-            "Research (information gathering, analysis), "
-            "Content (document creation, editing), "
-            "Data Analyst (data analysis, visualization), "
-            "Code Assistant (code review, debugging), "
-            "IT Operations (infrastructure monitoring), "
-            "Sales Intelligence (deal analysis, forecasting), "
-            "Recruitment (candidate screening, interview questions), "
-            "Software Development (full SDLC support). "
-            "Route user requests to the appropriate agent based on their needs."
+            "Use this plugin to interact with enterprise AI agents and process documents. "
+            "Available capabilities: "
+            "1) DOCUMENT PROCESSING - Summarize documents, extract text/tables/key-values, analyze PDFs/Word/PowerPoint. "
+            "2) IT SUPPORT - Helpdesk (password resets, technical support), ServiceNow (ticket creation, incident management). "
+            "3) BUSINESS PRODUCTIVITY - Research (information gathering), Content (document creation), "
+            "Data Analyst (data analysis, visualization), Code Assistant (code review, debugging). "
+            "4) SPECIALIZED AGENTS - IT Operations (infrastructure), Sales Intelligence (deal analysis), "
+            "Recruitment (candidate screening), Software Development (full SDLC support). "
+            "For document tasks, use the /document endpoint. For chat tasks, use /chat endpoint."
         ),
         "api": {
             "type": "openapi",
@@ -492,6 +584,78 @@ async def get_openapi_spec(request: Request):
                         }
                     }
                 }
+            },
+            "/document": {
+                "post": {
+                    "operationId": "processDocument",
+                    "summary": "Process Document",
+                    "description": (
+                        "Process a document for summarization, text extraction, table extraction, "
+                        "or comprehensive analysis. Supports PDF, Word, PowerPoint, and images."
+                    ),
+                    "x-ms-visibility": "important",
+                    "parameters": [
+                        {
+                            "name": "body",
+                            "in": "body",
+                            "required": True,
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "documentContent": {
+                                        "type": "string",
+                                        "description": "Base64-encoded document content",
+                                        "x-ms-summary": "Document Content (Base64)"
+                                    },
+                                    "documentUrl": {
+                                        "type": "string",
+                                        "description": "URL to the document",
+                                        "x-ms-summary": "Document URL"
+                                    },
+                                    "documentName": {
+                                        "type": "string",
+                                        "description": "Original filename for type detection",
+                                        "x-ms-summary": "Document Name"
+                                    },
+                                    "operation": {
+                                        "type": "string",
+                                        "description": "Operation to perform on the document",
+                                        "x-ms-summary": "Operation",
+                                        "enum": ["summarize", "extract_text", "extract_tables", "extract_key_values", "analyze"],
+                                        "default": "summarize"
+                                    },
+                                    "conversationId": {
+                                        "type": "string",
+                                        "description": "Conversation ID for context continuity",
+                                        "x-ms-summary": "Conversation ID"
+                                    },
+                                    "options": {
+                                        "type": "object",
+                                        "description": "Additional processing options",
+                                        "x-ms-summary": "Options"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Document processed successfully",
+                            "schema": {
+                                "$ref": "#/definitions/DocumentResponse"
+                            }
+                        },
+                        "400": {
+                            "description": "Invalid request or document"
+                        },
+                        "401": {
+                            "description": "Authentication required"
+                        },
+                        "500": {
+                            "description": "Processing error"
+                        }
+                    }
+                }
             }
         },
         "definitions": {
@@ -564,6 +728,41 @@ async def get_openapi_spec(request: Request):
                     "timestamp": {"type": "string"},
                     "version": {"type": "string"},
                     "agents_available": {"type": "integer"}
+                }
+            },
+            "DocumentResponse": {
+                "type": "object",
+                "required": ["response", "conversationId", "operation", "timestamp"],
+                "properties": {
+                    "response": {
+                        "type": "string",
+                        "description": "Processed result (summary, extracted text, etc.)"
+                    },
+                    "conversationId": {
+                        "type": "string",
+                        "description": "Conversation ID for follow-up"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "description": "Operation that was performed"
+                    },
+                    "documentName": {
+                        "type": "string",
+                        "description": "Processed document name"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Processing metadata"
+                    },
+                    "suggestions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Follow-up suggestions"
+                    }
                 }
             }
         }
@@ -772,6 +971,422 @@ async def copilot_chat_specific(
             status_code=500,
             detail="An error occurred while processing your request. Please try again or contact support."
         )
+
+
+# ============================================================================
+# Document Processing Endpoints
+# ============================================================================
+
+# Document processing pipeline (lazy loaded)
+_document_pipeline = None
+
+
+def _get_document_pipeline():
+    """Get or create the document processing pipeline."""
+    global _document_pipeline
+    if _document_pipeline is None:
+        try:
+            from langchain_azure_ai.document_processing import (
+                MultiModalDocumentPipeline,
+                ProcessingConfig,
+            )
+            _document_pipeline = MultiModalDocumentPipeline(
+                config=ProcessingConfig(
+                    extract_tables=True,
+                    extract_images=False,  # Disable for faster processing
+                    generate_summaries=True,
+                    chunk_size=2000,
+                )
+            )
+            logger.info("Document processing pipeline initialized")
+        except ImportError as e:
+            logger.warning(f"Document processing not available: {e}")
+    return _document_pipeline
+
+
+async def _process_document_content(
+    content: Optional[str],
+    url: Optional[str],
+    filename: Optional[str],
+    operation: str,
+    options: Optional[Dict[str, Any]],
+    telemetry: Optional["AgentTelemetry"],
+) -> Dict[str, Any]:
+    """Process document and return results.
+
+    Args:
+        content: Base64-encoded document content.
+        url: URL to fetch document from.
+        filename: Original filename for type detection.
+        operation: Processing operation to perform.
+        options: Additional processing options.
+        telemetry: Telemetry instance for tracking.
+
+    Returns:
+        Dictionary with processing results.
+    """
+    registry = get_registry()
+    start_time = time.time()
+    result_metadata: Dict[str, Any] = {}
+
+    # Get document intelligence agent for AI-powered operations
+    doc_agent = registry.get_enterprise_agent("document_intelligence")
+
+    try:
+        # Determine source type and prepare document
+        temp_file_path = None
+        source_type = "local"
+
+        if content:
+            # Decode base64 content to temp file
+            decoded = base64.b64decode(content)
+            suffix = Path(filename).suffix if filename else ".pdf"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(decoded)
+                temp_file_path = tmp.name
+            source_type = "local"
+            result_metadata["source"] = "base64_upload"
+            result_metadata["document_size_bytes"] = len(decoded)
+
+        elif url:
+            # Use URL directly
+            temp_file_path = url
+            source_type = "url"
+            result_metadata["source"] = "url"
+
+        else:
+            return {
+                "error": "No document content provided. Supply either documentContent (base64) or documentUrl.",
+                "success": False,
+            }
+
+        # Perform operation based on type
+        response_text = ""
+
+        if operation == "summarize":
+            # Use Document Intelligence agent for AI summarization
+            if doc_agent:
+                prompt = f"Please summarize this document concisely. "
+                if options:
+                    if options.get("max_length"):
+                        prompt += f"Keep the summary under {options['max_length']} words. "
+                    if options.get("format") == "bullet_points":
+                        prompt += "Use bullet points. "
+                    if options.get("focus"):
+                        prompt += f"Focus on: {options['focus']}. "
+
+                # Process with agent
+                if temp_file_path and source_type == "local":
+                    # Upload file to agent first if it supports it
+                    if hasattr(doc_agent, "process_document"):
+                        doc_result = doc_agent.process_document(
+                            temp_file_path,
+                            operation="summarize",
+                            options=options,
+                        )
+                        response_text = doc_result.get("summary", doc_result.get("text", ""))
+                    else:
+                        # Fallback: read and send content
+                        with open(temp_file_path, "rb") as f:
+                            file_content = f.read()
+                        response_text = doc_agent.chat(
+                            f"{prompt}\n\n[Document: {filename or 'uploaded document'}]"
+                        )
+                else:
+                    response_text = doc_agent.chat(
+                        f"{prompt}\n\nDocument URL: {url}"
+                    )
+            else:
+                # Fallback to pipeline
+                pipeline = _get_document_pipeline()
+                if pipeline:
+                    processed = await pipeline.process(temp_file_path, source_type=source_type)
+                    response_text = _generate_summary(processed.text_content, options)
+                    result_metadata["pages_processed"] = processed.layout.page_count if processed.layout else 1
+                    result_metadata["tables_found"] = len(processed.tables)
+                else:
+                    return {"error": "Document processing not available", "success": False}
+
+        elif operation == "extract_text":
+            pipeline = _get_document_pipeline()
+            if pipeline:
+                processed = await pipeline.process(temp_file_path, source_type=source_type)
+                response_text = processed.text_content
+                result_metadata["text_length"] = len(response_text)
+            else:
+                return {"error": "Document processing not available", "success": False}
+
+        elif operation == "extract_tables":
+            pipeline = _get_document_pipeline()
+            if pipeline:
+                processed = await pipeline.process(temp_file_path, source_type=source_type)
+                tables_markdown = "\n\n".join([t.markdown for t in processed.tables])
+                response_text = tables_markdown or "No tables found in the document."
+                result_metadata["tables_found"] = len(processed.tables)
+            else:
+                return {"error": "Document processing not available", "success": False}
+
+        elif operation == "extract_key_values":
+            pipeline = _get_document_pipeline()
+            if pipeline:
+                processed = await pipeline.process(temp_file_path, source_type=source_type)
+                if processed.key_value_pairs:
+                    kv_text = "\n".join([f"- **{k}**: {v}" for k, v in processed.key_value_pairs])
+                    response_text = kv_text
+                else:
+                    response_text = "No key-value pairs found in the document."
+                result_metadata["pairs_found"] = len(processed.key_value_pairs)
+            else:
+                return {"error": "Document processing not available", "success": False}
+
+        elif operation == "analyze":
+            # Comprehensive analysis using Document Intelligence agent
+            if doc_agent:
+                response_text = doc_agent.chat(
+                    f"Analyze this document comprehensively. Extract key insights, "
+                    f"main topics, and important data points.\n\n"
+                    f"[Document: {filename or url or 'uploaded document'}]"
+                )
+            else:
+                pipeline = _get_document_pipeline()
+                if pipeline:
+                    processed = await pipeline.process(temp_file_path, source_type=source_type)
+                    response_text = _generate_analysis(processed, options)
+                    result_metadata["pages_processed"] = processed.layout.page_count if processed.layout else 1
+                else:
+                    return {"error": "Document processing not available", "success": False}
+
+        else:
+            return {
+                "error": f"Unknown operation: {operation}. Supported: summarize, extract_text, extract_tables, extract_key_values, analyze",
+                "success": False,
+            }
+
+        # Calculate processing time
+        processing_time_ms = (time.time() - start_time) * 1000
+        result_metadata["processing_time_ms"] = round(processing_time_ms, 2)
+
+        # Record telemetry
+        if telemetry:
+            telemetry.record_custom_metric("document_processing_time_ms", processing_time_ms)
+            telemetry.record_custom_metric("document_operation", operation)
+
+        return {
+            "response": response_text,
+            "success": True,
+            "metadata": result_metadata,
+        }
+
+    except Exception as e:
+        logger.error(f"Document processing error: {e}", exc_info=True)
+        if telemetry:
+            telemetry.record_error(str(e))
+        return {
+            "error": f"Failed to process document: {str(e)}",
+            "success": False,
+        }
+
+    finally:
+        # Clean up temp file
+        if temp_file_path and source_type == "local" and content:
+            try:
+                Path(temp_file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _generate_summary(text: str, options: Optional[Dict[str, Any]] = None) -> str:
+    """Generate a basic summary from extracted text."""
+    if not text:
+        return "No text content found in the document."
+
+    max_length = 500
+    if options and options.get("max_length"):
+        max_length = options["max_length"]
+
+    # Simple extractive summary - take first paragraphs
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    summary_parts = []
+    current_length = 0
+
+    for para in paragraphs[:10]:  # Consider first 10 paragraphs
+        if current_length + len(para.split()) > max_length:
+            break
+        summary_parts.append(para)
+        current_length += len(para.split())
+
+    if not summary_parts:
+        # Fallback: truncate text
+        words = text.split()[:max_length]
+        return " ".join(words) + "..."
+
+    return "\n\n".join(summary_parts)
+
+
+def _generate_analysis(processed_doc, options: Optional[Dict[str, Any]] = None) -> str:
+    """Generate comprehensive analysis of processed document."""
+    analysis_parts = ["## Document Analysis\n"]
+
+    # Document overview
+    if processed_doc.layout:
+        analysis_parts.append(f"**Pages:** {processed_doc.layout.page_count}")
+
+    # Text summary
+    text_length = len(processed_doc.text_content) if processed_doc.text_content else 0
+    analysis_parts.append(f"**Text Length:** {text_length:,} characters")
+
+    # Tables
+    if processed_doc.tables:
+        analysis_parts.append(f"\n### Tables Found: {len(processed_doc.tables)}")
+        for i, table in enumerate(processed_doc.tables[:3], 1):  # Show first 3
+            analysis_parts.append(f"\n**Table {i}:**\n{table.markdown[:500]}")
+
+    # Key-value pairs
+    if processed_doc.key_value_pairs:
+        analysis_parts.append(f"\n### Key Information: {len(processed_doc.key_value_pairs)} items")
+        for k, v in processed_doc.key_value_pairs[:10]:  # Show first 10
+            analysis_parts.append(f"- **{k}:** {v}")
+
+    # Content preview
+    if processed_doc.text_content:
+        preview = processed_doc.text_content[:1000]
+        analysis_parts.append(f"\n### Content Preview:\n{preview}...")
+
+    return "\n".join(analysis_parts)
+
+
+@router.post(
+    "/document",
+    response_model=CopilotDocumentResponse,
+    summary="Process Document",
+    description=(
+        "Process a document for summarization, text extraction, table extraction, "
+        "or comprehensive analysis. Supports PDF, Word, PowerPoint, and images. "
+        "Send document as base64-encoded content or provide a URL."
+    ),
+)
+async def copilot_process_document(
+    request: CopilotDocumentRequest,
+    auth: str = Depends(verify_api_key),
+):
+    """Process a document and return the requested analysis.
+
+    This endpoint supports:
+    - Document summarization (AI-powered)
+    - Text extraction (full text content)
+    - Table extraction (markdown format)
+    - Key-value pair extraction
+    - Comprehensive analysis
+
+    Documents can be provided as:
+    - Base64-encoded content (documentContent)
+    - URL to publicly accessible document (documentUrl)
+    """
+    conversation_id = request.conversationId or str(uuid.uuid4())
+
+    # Initialize telemetry with dual tracking
+    telemetry = get_copilot_telemetry(f"copilot-document-{request.operation}")
+
+    # Enable LangSmith tracing if configured
+    langsmith_enabled = os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true"
+    if langsmith_enabled:
+        logger.debug("LangSmith tracing enabled for document processing")
+
+    try:
+        # Track with telemetry (Azure App Insights)
+        if telemetry:
+            with telemetry.track_execution() as span:
+                if span:
+                    span.set_attribute("copilot.conversation_id", conversation_id)
+                    span.set_attribute("copilot.operation", request.operation)
+                    span.set_attribute("copilot.document_name", request.documentName or "unknown")
+                    span.set_attribute("copilot.source", "base64" if request.documentContent else "url")
+
+                result = await _process_document_content(
+                    content=request.documentContent,
+                    url=request.documentUrl,
+                    filename=request.documentName,
+                    operation=request.operation,
+                    options=request.options,
+                    telemetry=telemetry,
+                )
+        else:
+            result = await _process_document_content(
+                content=request.documentContent,
+                url=request.documentUrl,
+                filename=request.documentName,
+                operation=request.operation,
+                options=request.options,
+                telemetry=None,
+            )
+
+        if not result.get("success", False):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Document processing failed")
+            )
+
+        # Generate suggestions based on operation
+        suggestions = _get_document_suggestions(request.operation)
+
+        logger.info(
+            f"Copilot document processing completed: operation={request.operation}, "
+            f"conversation={conversation_id}, "
+            f"time_ms={result.get('metadata', {}).get('processing_time_ms', 0)}"
+        )
+
+        return CopilotDocumentResponse(
+            response=result["response"],
+            conversationId=conversation_id,
+            operation=request.operation,
+            documentName=request.documentName,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            metadata=result.get("metadata"),
+            suggestions=suggestions,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        if telemetry:
+            telemetry.record_error(str(e))
+        logger.error(f"Error in Copilot document processing: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while processing your document. Please try again."
+        )
+
+
+def _get_document_suggestions(operation: str) -> List[str]:
+    """Get follow-up suggestions based on document operation."""
+    suggestions_map = {
+        "summarize": [
+            "Extract all tables from this document",
+            "Get key information and data points",
+            "Analyze document in detail",
+        ],
+        "extract_text": [
+            "Summarize the extracted text",
+            "Find specific information in the text",
+            "Extract tables separately",
+        ],
+        "extract_tables": [
+            "Summarize the document content",
+            "Analyze the data in these tables",
+            "Extract key-value pairs",
+        ],
+        "extract_key_values": [
+            "Summarize the document",
+            "Extract full text content",
+            "Get detailed analysis",
+        ],
+        "analyze": [
+            "Get a shorter summary",
+            "Extract specific sections",
+            "Ask questions about the content",
+        ],
+    }
+    return suggestions_map.get(operation, ["Process another document", "Ask a question"])
 
 
 # ============================================================================

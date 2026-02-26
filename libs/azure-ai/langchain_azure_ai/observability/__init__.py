@@ -413,7 +413,7 @@ class AgentTelemetry:
         completion_tokens: int = 0,
     ) -> None:
         """Record token usage.
-        
+
         Args:
             prompt_tokens: Number of prompt tokens.
             completion_tokens: Number of completion tokens.
@@ -422,12 +422,86 @@ class AgentTelemetry:
             "agent_name": self.agent_name,
             "agent_type": self.agent_type,
         }
-        
+
         try:
             if hasattr(self, "_token_counter"):
                 self._token_counter.add(prompt_tokens + completion_tokens, labels)
         except Exception as e:
             logger.debug(f"Failed to record tokens: {e}")
+
+    def record_custom_metric(
+        self,
+        metric_name: str,
+        value: Union[int, float, str],
+        labels: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Record a custom metric value.
+
+        Args:
+            metric_name: Name of the metric.
+            value: Metric value (numeric or string).
+            labels: Optional additional labels.
+        """
+        all_labels = {
+            "agent_name": self.agent_name,
+            "agent_type": self.agent_type,
+        }
+        if labels:
+            all_labels.update(labels)
+
+        try:
+            if self._meter is not None:
+                # For numeric values, use a gauge
+                if isinstance(value, (int, float)):
+                    gauge = self._meter.create_up_down_counter(
+                        name=f"agent.custom.{metric_name}",
+                        description=f"Custom metric: {metric_name}",
+                    )
+                    gauge.add(value, all_labels)
+                else:
+                    # For string values, log as attribute
+                    logger.info(
+                        f"Custom metric: {metric_name}={value}",
+                        extra={"metric_name": metric_name, "metric_value": value, **all_labels},
+                    )
+        except Exception as e:
+            logger.debug(f"Failed to record custom metric {metric_name}: {e}")
+
+    def record_error(
+        self,
+        error_message: str,
+        error_type: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record an error occurrence.
+
+        Args:
+            error_message: Error description.
+            error_type: Type/category of error.
+            metadata: Additional error context.
+        """
+        labels = {
+            "agent_name": self.agent_name,
+            "agent_type": self.agent_type,
+            "error_type": error_type or "unknown",
+        }
+
+        try:
+            if hasattr(self, "_error_counter"):
+                self._error_counter.add(1, labels)
+
+            # Also log the error
+            logger.error(
+                f"[{self.agent_name}] Error: {error_message}",
+                extra={
+                    "error_message": error_message,
+                    "error_type": error_type,
+                    **(metadata or {}),
+                    **labels,
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record error metric: {e}")
     
     def log_request(
         self,
