@@ -453,10 +453,17 @@ class AgentTelemetry:
             if self._meter is not None:
                 # For numeric values, use a gauge
                 if isinstance(value, (int, float)):
-                    gauge = self._meter.create_up_down_counter(
-                        name=f"agent.custom.{metric_name}",
-                        description=f"Custom metric: {metric_name}",
-                    )
+                    # Lazily initialize the custom metric counters cache
+                    if not hasattr(self, "_custom_metric_counters"):
+                        self._custom_metric_counters = {}
+
+                    gauge = self._custom_metric_counters.get(metric_name)
+                    if gauge is None:
+                        gauge = self._meter.create_up_down_counter(
+                            name=f"agent.custom.{metric_name}",
+                            description=f"Custom metric: {metric_name}",
+                        )
+                        self._custom_metric_counters[metric_name] = gauge
                     gauge.add(value, all_labels)
                 else:
                     # For string values, log as attribute
