@@ -246,8 +246,8 @@ class CopilotDocumentRequest(BaseModel):
         None,
         description="Original filename for type detection"
     )
-    operation: str = Field(
-        "summarize",
+    operation: DocumentOperation = Field(
+        DocumentOperation.SUMMARIZE,
         description="Operation to perform: summarize, extract_text, extract_tables, extract_key_values, analyze"
     )
     conversationId: Optional[str] = Field(
@@ -1028,27 +1028,96 @@ async def _process_document_content(
     registry = get_registry()
     start_time = time.time()
     result_metadata: Dict[str, Any] = {}
+    
+    # Initialize variables for finally block
+    temp_file_path = None
+    source_type = "local"
+    content_to_clean = None
 
     # Get document intelligence agent for AI-powered operations
     doc_agent = registry.get_enterprise_agent("document_intelligence")
+    if not doc_agent:
+        logger.warning(
+            "Document intelligence enterprise agent 'document_intelligence' is not available; "
+            "falling back to the default document processing pipeline."
+        )
 
     try:
         # Determine source type and prepare document
-        temp_file_path = None
-        source_type = "local"
+        # Maximum document size: 50MB
+        MAX_DOCUMENT_SIZE = 50 * 1024 * 1024
 
         if content:
-            # Decode base64 content to temp file
-            decoded = base64.b64decode(content)
+            # Validate and decode base64 content
+            try:
+                # Check estimated size before decoding (base64 is ~33% larger)
+                estimated_size = (len(content) * 3) // 4
+                if estimated_size > MAX_DOCUMENT_SIZE:
+                    return {
+                        "error": f"Document size exceeds maximum allowed size of {MAX_DOCUMENT_SIZE // (1024 * 1024)}MB",
+                        "success": False,
+                    }
+                
+                decoded = base64.b64decode(content)
+                
+                # Check actual size
+                if len(decoded) > MAX_DOCUMENT_SIZE:
+                    return {
+                        "error": f"Document size exceeds maximum allowed size of {MAX_DOCUMENT_SIZE // (1024 * 1024)}MB",
+                        "success": False,
+                    }
+            except Exception as e:
+                logger.error(f"Failed to decode base64 content: {e}")
+                return {
+                    "error": "Invalid base64 encoding. Please ensure the document content is properly base64-encoded.",
+                    "success": False,
+                }
+            
             suffix = Path(filename).suffix if filename else ".pdf"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(decoded)
                 temp_file_path = tmp.name
             source_type = "local"
+            content_to_clean = temp_file_path
             result_metadata["source"] = "base64_upload"
             result_metadata["document_size_bytes"] = len(decoded)
 
         elif url:
+            # Validate URL before using it
+            from urllib.parse import urlparse
+            
+            try:
+                parsed = urlparse(url)
+                # Check for valid scheme
+                if parsed.scheme not in ["http", "https"]:
+                    return {
+                        "error": "Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.",
+                        "success": False,
+                    }
+                
+                # Block localhost and private IP ranges to prevent SSRF
+                hostname = parsed.hostname
+                if hostname:
+                    hostname_lower = hostname.lower()
+                    if hostname_lower in ["localhost", "127.0.0.1", "0.0.0.0"]:
+                        return {
+                            "error": "Access to localhost is not allowed for security reasons.",
+                            "success": False,
+                        }
+                    
+                    # Check for private IP ranges (basic check)
+                    if hostname_lower.startswith("192.168.") or hostname_lower.startswith("10.") or hostname_lower.startswith("172."):
+                        return {
+                            "error": "Access to private IP addresses is not allowed for security reasons.",
+                            "success": False,
+                        }
+            except Exception as e:
+                logger.error(f"URL validation error: {e}")
+                return {
+                    "error": "Invalid URL format.",
+                    "success": False,
+                }
+            
             # Use URL directly
             temp_file_path = url
             source_type = "url"
@@ -1075,11 +1144,13 @@ async def _process_document_content(
                     if options.get("focus"):
                         prompt += f"Focus on: {options['focus']}. "
 
-                # Process with agent
+                # Process with agent (wrap synchronous calls in executor)
+                import asyncio
                 if temp_file_path and source_type == "local":
                     # Upload file to agent first if it supports it
                     if hasattr(doc_agent, "process_document"):
-                        doc_result = doc_agent.process_document(
+                        doc_result = await asyncio.to_thread(
+                            doc_agent.process_document,
                             temp_file_path,
                             operation="summarize",
                             options=options,
@@ -1088,12 +1159,19 @@ async def _process_document_content(
                     else:
                         # Fallback: read and send content
                         with open(temp_file_path, "rb") as f:
-                            file_content = f.read()
-                        response_text = doc_agent.chat(
-                            f"{prompt}\n\n[Document: {filename or 'uploaded document'}]"
+                            file_bytes = f.read()
+                        # Best-effort decode of file content to text for summarization
+                        try:
+                            file_text = file_bytes.decode("utf-8", errors="ignore")
+                        except Exception:
+                            file_text = ""
+                        response_text = await asyncio.to_thread(
+                            doc_agent.chat,
+                            f"{prompt}\n\n[Document: {filename or 'uploaded document'}]\n\n{file_text}"
                         )
                 else:
-                    response_text = doc_agent.chat(
+                    response_text = await asyncio.to_thread(
+                        doc_agent.chat,
                         f"{prompt}\n\nDocument URL: {url}"
                     )
             else:
@@ -1142,7 +1220,9 @@ async def _process_document_content(
         elif operation == "analyze":
             # Comprehensive analysis using Document Intelligence agent
             if doc_agent:
-                response_text = doc_agent.chat(
+                import asyncio
+                response_text = await asyncio.to_thread(
+                    doc_agent.chat,
                     f"Analyze this document comprehensively. Extract key insights, "
                     f"main topics, and important data points.\n\n"
                     f"[Document: {filename or url or 'uploaded document'}]"
@@ -1188,9 +1268,9 @@ async def _process_document_content(
 
     finally:
         # Clean up temp file
-        if temp_file_path and source_type == "local" and content:
+        if content_to_clean and source_type == "local":
             try:
-                Path(temp_file_path).unlink(missing_ok=True)
+                Path(content_to_clean).unlink(missing_ok=True)
             except Exception:
                 pass
 
