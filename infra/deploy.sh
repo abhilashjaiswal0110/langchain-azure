@@ -262,6 +262,6 @@ fi
 echo ""
 echo "Document Processing Endpoint:"
 echo "  POST $CONTAINER_APP_URL/api/copilot/document"
-echo "  - Supports: summarize, extract_text, extract_tables, analyze"
+echo "  - Supports: summarize, extract_text, extract_tables, extract_key_values, analyze"
 echo "  - Accepts: base64 content or URL"
 echo ""
