@@ -13,10 +13,10 @@ Usage:
         TracingMiddleware,
         AgentTelemetry,
     )
-    
+
     # Initialize Azure Monitor
     setup_azure_monitor()
-    
+
     # Use telemetry in agents
     telemetry = AgentTelemetry("my-agent")
     with telemetry.track_execution() as span:
@@ -31,7 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, TypeVar, Union
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 @dataclass
 class TelemetryConfig:
     """Configuration for observability features.
-    
+
     Attributes:
         app_insights_connection: Application Insights connection string.
         enable_azure_monitor: Whether to enable Azure Monitor tracing.
@@ -57,7 +57,7 @@ class TelemetryConfig:
     enable_token_tracking: bool = True
     sample_rate: float = 1.0
     custom_dimensions: Dict[str, str] = field(default_factory=dict)
-    
+
     @classmethod
     def from_env(cls) -> "TelemetryConfig":
         """Create configuration from environment variables."""
@@ -97,10 +97,10 @@ def setup_azure_monitor(
     config: Optional[TelemetryConfig] = None,
 ) -> bool:
     """Initialize Azure Monitor OpenTelemetry integration.
-    
+
     This function sets up Azure Monitor for distributed tracing and metrics.
     It should be called once at application startup.
-    
+
     Args:
         connection_string: Application Insights connection string.
             If not provided, reads from APPLICATIONINSIGHTS_CONNECTION_STRING.
@@ -110,36 +110,36 @@ def setup_azure_monitor(
     if not getattr(config, "enable_azure_monitor", True):
         logger.info("Azure Monitor telemetry disabled by configuration")
         return False
-        
+
     Returns:
         True if Azure Monitor was successfully initialized, False otherwise.
-        
+
     Example:
         >>> from langchain_azure_ai.observability import setup_azure_monitor
         >>> setup_azure_monitor()
         True
     """
     global _azure_monitor_initialized, _tracer, _meter
-    
+
     if _azure_monitor_initialized:
         logger.debug("Azure Monitor already initialized")
         return True
-    
+
     config = config or TelemetryConfig.from_env()
     conn_string = connection_string or config.app_insights_connection
-    
+
     if not conn_string:
         logger.warning(
             "APPLICATIONINSIGHTS_CONNECTION_STRING not set. "
             "Azure Monitor tracing will be disabled."
         )
         return False
-    
+
     try:
         from azure.monitor.opentelemetry import configure_azure_monitor
         from opentelemetry import trace, metrics
         from opentelemetry.instrumentation.threading import ThreadingInstrumentor
-        
+
         # Configure Azure Monitor
         configure_azure_monitor(
             connection_string=conn_string,
@@ -152,18 +152,18 @@ def setup_azure_monitor(
                 "requests": {"enabled": True},
             },
         )
-        
+
         # Instrument threading for async operations
         ThreadingInstrumentor().instrument()
-        
+
         # Get tracer and meter
         _tracer = trace.get_tracer("langchain_azure_ai.agents")
         _meter = metrics.get_meter("langchain_azure_ai.agents")
-        
+
         _azure_monitor_initialized = True
         logger.info("Azure Monitor OpenTelemetry initialized successfully")
         return True
-        
+
     except ImportError as e:
         logger.warning(
             f"OpenTelemetry packages not installed: {e}. "
@@ -202,7 +202,7 @@ def get_meter():
 @dataclass
 class ExecutionMetrics:
     """Metrics captured during agent execution.
-    
+
     Attributes:
         start_time: Execution start timestamp.
         end_time: Execution end timestamp.
@@ -226,7 +226,7 @@ class ExecutionMetrics:
     agent_name: str = ""
     agent_type: str = ""
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
-    
+
     def finalize(self) -> None:
         """Finalize metrics calculation."""
         self.end_time = datetime.now(timezone.utc)
@@ -236,10 +236,10 @@ class ExecutionMetrics:
 
 class AgentTelemetry:
     """Telemetry collector for agent operations.
-    
+
     This class provides convenient methods for tracking agent execution,
     recording metrics, and creating spans for distributed tracing.
-    
+
     Example:
         >>> telemetry = AgentTelemetry("my-agent", "enterprise")
         >>> with telemetry.track_execution() as metrics:
@@ -248,7 +248,15 @@ class AgentTelemetry:
         ...     metrics.completion_tokens = 50
         >>> print(f"Execution took {metrics.duration_ms}ms")
     """
-    
+
+    # Class-level instrument cache: id(meter) → {metric_name: instrument}.
+    # Keyed by meter-instance identity so metrics registered on different meters
+    # are stored independently, while multiple AgentTelemetry instances that
+    # share the same underlying OpenTelemetry Meter reuse the same instruments.
+    # This prevents duplicate-registration errors when one AgentTelemetry is
+    # created per request (a common pattern in Copilot Studio endpoints).
+    _metric_instrument_cache: ClassVar[Dict[int, Dict[str, Any]]] = {}
+
     def __init__(
         self,
         agent_name: str,
@@ -256,7 +264,7 @@ class AgentTelemetry:
         config: Optional[TelemetryConfig] = None,
     ):
         """Initialize agent telemetry.
-        
+
         Args:
             agent_name: Name of the agent for identification.
             agent_type: Type of agent (it, enterprise, deep, custom).
@@ -267,15 +275,15 @@ class AgentTelemetry:
         self.config = config or TelemetryConfig.from_env()
         self._tracer = get_tracer()
         self._meter = get_meter()
-        
+
         # Create metrics instruments if available
         self._setup_metrics()
-    
+
     def _setup_metrics(self) -> None:
         """Set up OpenTelemetry metrics instruments."""
         if self._meter is None:
             return
-            
+
         try:
             # Execution duration histogram
             self._duration_histogram = self._meter.create_histogram(
@@ -283,31 +291,31 @@ class AgentTelemetry:
                 description="Agent execution duration in milliseconds",
                 unit="ms",
             )
-            
+
             # Token usage counter
             self._token_counter = self._meter.create_counter(
                 name="agent.tokens.total",
                 description="Total tokens used by agent",
                 unit="tokens",
             )
-            
+
             # Request counter
             self._request_counter = self._meter.create_counter(
                 name="agent.requests.total",
                 description="Total agent requests",
                 unit="requests",
             )
-            
+
             # Error counter
             self._error_counter = self._meter.create_counter(
                 name="agent.errors.total",
                 description="Total agent errors",
                 unit="errors",
             )
-            
+
         except Exception as e:
             logger.warning(f"Failed to setup metrics instruments: {e}")
-    
+
     @contextmanager
     def track_execution(
         self,
@@ -315,14 +323,14 @@ class AgentTelemetry:
         attributes: Optional[Dict[str, Any]] = None,
     ):
         """Context manager for tracking agent execution.
-        
+
         Args:
             operation: Name of the operation (invoke, stream, chat).
             attributes: Additional attributes to record.
-            
+
         Yields:
             ExecutionMetrics instance for recording metrics.
-            
+
         Example:
             >>> with telemetry.track_execution("chat") as metrics:
             ...     response = agent.chat(message)
@@ -332,7 +340,7 @@ class AgentTelemetry:
             agent_name=self.agent_name,
             agent_type=self.agent_type,
         )
-        
+
         # Start span if tracer is available
         span = None
         if self._tracer:
@@ -348,15 +356,15 @@ class AgentTelemetry:
                 )
             except Exception as e:
                 logger.debug(f"Failed to start span: {e}")
-        
+
         try:
             yield metrics
             metrics.success = True
-            
+
         except Exception as e:
             metrics.success = False
             metrics.error = str(e)
-            
+
             if span:
                 try:
                     from opentelemetry.trace import StatusCode
@@ -365,13 +373,13 @@ class AgentTelemetry:
                 except Exception as span_error:
                     logger.debug(f"Failed to record error on span: {span_error}")
             raise
-            
+
         finally:
             metrics.finalize()
-            
+
             # Record metrics
             self._record_metrics(metrics)
-            
+
             # End span
             if span:
                 try:
@@ -383,30 +391,30 @@ class AgentTelemetry:
                     span.end()
                 except Exception as e:
                     logger.debug(f"Failed to finalize span: {e}")
-    
+
     def _record_metrics(self, metrics: ExecutionMetrics) -> None:
         """Record execution metrics to OpenTelemetry."""
         labels = {
             "agent_name": self.agent_name,
             "agent_type": self.agent_type,
         }
-        
+
         try:
             if hasattr(self, "_duration_histogram"):
                 self._duration_histogram.record(metrics.duration_ms, labels)
-            
+
             if hasattr(self, "_token_counter") and metrics.total_tokens > 0:
                 self._token_counter.add(metrics.total_tokens, labels)
-            
+
             if hasattr(self, "_request_counter"):
                 self._request_counter.add(1, labels)
-            
+
             if hasattr(self, "_error_counter") and not metrics.success:
                 self._error_counter.add(1, labels)
-                
+
         except Exception as e:
             logger.debug(f"Failed to record metrics: {e}")
-    
+
     def record_tokens(
         self,
         prompt_tokens: int = 0,
@@ -442,6 +450,10 @@ class AgentTelemetry:
             value: Metric value (numeric or string).
             labels: Optional additional labels.
         """
+        # Guard early: nothing to do without a meter (e.g. in unit tests).
+        if self._meter is None:
+            return
+
         all_labels = {
             "agent_name": self.agent_name,
             "agent_type": self.agent_type,
@@ -451,13 +463,25 @@ class AgentTelemetry:
 
         try:
             if self._meter is not None:
-                # For numeric values, use a gauge
+                # For numeric values, use an up_down_counter to track
+                # cumulative changes.
                 if isinstance(value, (int, float)):
-                    gauge = self._meter.create_up_down_counter(
-                        name=f"agent.custom.{metric_name}",
-                        description=f"Custom metric: {metric_name}",
-                    )
-                    gauge.add(value, all_labels)
+                    # Use the class-level cache so that multiple AgentTelemetry
+                    # instances sharing the same OTel Meter reuse the same
+                    # counter instrument instead of re-registering it
+                    # (duplicate registration raises an error in OpenTelemetry).
+                    meter_id = id(self._meter)
+                    if meter_id not in AgentTelemetry._metric_instrument_cache:
+                        AgentTelemetry._metric_instrument_cache[meter_id] = {}
+                    meter_cache = AgentTelemetry._metric_instrument_cache[meter_id]
+                    counter = meter_cache.get(metric_name)
+                    if counter is None:
+                        counter = self._meter.create_up_down_counter(
+                            name=f"agent.custom.{metric_name}",
+                            description=f"Custom metric: {metric_name}",
+                        )
+                        meter_cache[metric_name] = counter
+                    counter.add(value, all_labels)
                 else:
                     # For string values, log as attribute
                     logger.info(
@@ -502,7 +526,7 @@ class AgentTelemetry:
             )
         except Exception as e:
             logger.debug(f"Failed to record error metric: {e}")
-    
+
     def log_request(
         self,
         message: str,
@@ -510,7 +534,7 @@ class AgentTelemetry:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log an incoming request.
-        
+
         Args:
             message: The user message.
             session_id: Optional session identifier.
@@ -518,7 +542,7 @@ class AgentTelemetry:
         """
         if not self.config.enable_request_logging:
             return
-            
+
         logger.info(
             f"[{self.agent_name}] Request: {message[:100]}...",
             extra={
@@ -529,7 +553,7 @@ class AgentTelemetry:
                 **(metadata or {}),
             },
         )
-    
+
     def log_response(
         self,
         response: str,
@@ -538,7 +562,7 @@ class AgentTelemetry:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log an outgoing response.
-        
+
         Args:
             response: The agent response.
             session_id: Optional session identifier.
@@ -547,7 +571,7 @@ class AgentTelemetry:
         """
         if not self.config.enable_request_logging:
             return
-            
+
         logger.info(
             f"[{self.agent_name}] Response: {response[:100]}...",
             extra={
@@ -566,14 +590,14 @@ def trace_agent(
     track_tokens: bool = True,
 ):
     """Decorator for tracing agent methods.
-    
+
     This decorator adds OpenTelemetry tracing to agent methods,
     automatically recording execution time and optional token usage.
-    
+
     Args:
         operation: Name of the operation being traced.
         track_tokens: Whether to track token usage from response.
-        
+
     Example:
         >>> class MyAgent:
         ...     @trace_agent("chat")
@@ -591,18 +615,18 @@ def trace_agent(
                 if hasattr(agent_type, "value"):
                     agent_type = agent_type.value
                 telemetry = AgentTelemetry(agent_name, agent_type)
-            
+
             with telemetry.track_execution(operation) as metrics:
                 result = func(self, *args, **kwargs)
-                
+
                 # Try to extract token usage from result
                 if track_tokens and isinstance(result, dict):
                     usage = result.get("usage", {})
                     metrics.prompt_tokens = usage.get("prompt_tokens", 0)
                     metrics.completion_tokens = usage.get("completion_tokens", 0)
-                
+
                 return result
-        
+
         return wrapper  # type: ignore
     return decorator
 

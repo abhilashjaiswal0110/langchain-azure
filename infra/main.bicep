@@ -314,7 +314,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           identity: managedIdentity.id
         }
       ]
-      secrets: [
+      secrets: union([
         {
           name: 'azure-openai-key'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/azure-openai-key'
@@ -329,12 +329,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'appinsights-connection'
           value: appInsights.properties.ConnectionString
         }
+      ], !empty(langsmithApiKey) ? [
         {
           name: 'langsmith-api-key'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langsmith-api-key'
           identity: managedIdentity.id
         }
-      ]
+      ] : [])
     }
     template: {
       containers: [
@@ -345,7 +346,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('1.0')
             memory: '2Gi'
           }
-          env: [
+          env: concat([
             // Azure OpenAI Configuration
             {
               name: 'AZURE_OPENAI_ENDPOINT'
@@ -395,10 +396,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'LANGCHAIN_TRACING_V2'
               value: empty(langsmithApiKey) ? 'false' : 'true'
             }
+          ], !empty(langsmithApiKey) ? [
             {
               name: 'LANGCHAIN_API_KEY'
               secretRef: 'langsmith-api-key'
             }
+          ] : [], [
             {
               name: 'LANGCHAIN_PROJECT'
               value: langsmithProject
@@ -412,7 +415,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'CORS_ORIGINS'
               value: 'https://copilotstudio.microsoft.com,https://web.powerva.microsoft.com'
             }
-          ]
+          ])
           probes: [
             {
               type: 'Liveness'

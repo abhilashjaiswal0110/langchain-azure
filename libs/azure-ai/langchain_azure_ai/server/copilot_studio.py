@@ -232,7 +232,8 @@ class DocumentOperation(str, Enum):
 class CopilotDocumentRequest(BaseModel):
     """Document processing request model for Copilot Studio.
 
-    Supports multiple input methods: base64 content, URL, or file path.
+    Supports multiple input methods: base64-encoded content or a publicly
+    accessible URL.
     """
     documentContent: Optional[str] = Field(
         None,
@@ -246,8 +247,8 @@ class CopilotDocumentRequest(BaseModel):
         None,
         description="Original filename for type detection"
     )
-    operation: str = Field(
-        "summarize",
+    operation: DocumentOperation = Field(
+        DocumentOperation.SUMMARIZE,
         description="Operation to perform: summarize, extract_text, extract_tables, extract_key_values, analyze"
     )
     conversationId: Optional[str] = Field(
@@ -982,7 +983,13 @@ _document_pipeline = None
 
 
 def _get_document_pipeline():
-    """Get or create the document processing pipeline."""
+    """Get or create the document processing pipeline.
+
+    Returns ``None`` when a required dependency (Document Intelligence
+    endpoint) is absent, surfacing a clear error to the caller instead of
+    returning a broken pipeline that would raise ``ValueError`` at
+    processing time for non-image documents.
+    """
     global _document_pipeline
     if _document_pipeline is None:
         try:
@@ -990,6 +997,17 @@ def _get_document_pipeline():
                 MultiModalDocumentPipeline,
                 ProcessingConfig,
             )
+            # Document Intelligence is required for text/table extraction.
+            # Return None early when the endpoint is absent so callers can
+            # surface a clear "not available" error rather than a cryptic
+            # ValueError deep inside the pipeline.
+            doc_intel_endpoint = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
+            if not doc_intel_endpoint:
+                logger.warning(
+                    "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT is not configured; "
+                    "document processing pipeline is unavailable."
+                )
+                return None
             _document_pipeline = MultiModalDocumentPipeline(
                 config=ProcessingConfig(
                     extract_tables=True,
@@ -1029,26 +1047,149 @@ async def _process_document_content(
     start_time = time.time()
     result_metadata: Dict[str, Any] = {}
 
-    # Get document intelligence agent for AI-powered operations
-    doc_agent = registry.get_enterprise_agent("document_intelligence")
+    # Initialize variables for finally block
+    temp_file_path = None
+    source_type = "local"
+    content_to_clean = None
 
     try:
+        # Get document intelligence agent for AI-powered operations.
+        # Placed inside the try block so failures are caught, telemetry is
+        # recorded, and a structured error response is returned.
+        doc_agent = registry.get_enterprise_agent("document_intelligence")
+        if not doc_agent:
+            logger.warning(
+                "Document intelligence enterprise agent 'document_intelligence' is not available; "
+                "falling back to the default document processing pipeline."
+            )
+
         # Determine source type and prepare document
-        temp_file_path = None
-        source_type = "local"
+        # Maximum document size: 50MB
+        MAX_DOCUMENT_SIZE = 50 * 1024 * 1024
 
         if content:
-            # Decode base64 content to temp file
-            decoded = base64.b64decode(content)
+            # Validate and decode base64 content
+            try:
+                # Check estimated size before decoding (base64 is ~33% larger)
+                estimated_size = (len(content) * 3) // 4
+                if estimated_size > MAX_DOCUMENT_SIZE:
+                    return {
+                        "error": f"Document size exceeds maximum allowed size of {MAX_DOCUMENT_SIZE // (1024 * 1024)}MB",
+                        "success": False,
+                    }
+
+                # Use validate=True to reject any characters outside the
+                # standard base64 alphabet (prevents hidden injection payloads).
+                decoded = base64.b64decode(content.strip(), validate=True)
+
+                # Check actual size
+                if len(decoded) > MAX_DOCUMENT_SIZE:
+                    return {
+                        "error": f"Document size exceeds maximum allowed size of {MAX_DOCUMENT_SIZE // (1024 * 1024)}MB",
+                        "success": False,
+                    }
+            except Exception as e:
+                logger.error(f"Failed to decode base64 content: {e}")
+                return {
+                    "error": "Invalid base64 encoding. Please ensure the document content is properly base64-encoded.",
+                    "success": False,
+                }
+
             suffix = Path(filename).suffix if filename else ".pdf"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(decoded)
                 temp_file_path = tmp.name
             source_type = "local"
+            content_to_clean = temp_file_path
             result_metadata["source"] = "base64_upload"
             result_metadata["document_size_bytes"] = len(decoded)
 
         elif url:
+            # Validate URL before using it – SSRF prevention.
+            # Uses ipaddress for precise range matching instead of string
+            # prefixes, which prevents bypasses via non-canonical forms and
+            # correctly catches ranges like 169.254.x.x (instance metadata).
+            import ipaddress
+            import socket
+            from urllib.parse import urlparse
+
+            try:
+                parsed = urlparse(url)
+                # Only allow HTTP and HTTPS
+                if parsed.scheme not in ("http", "https"):
+                    return {
+                        "error": "Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.",
+                        "success": False,
+                    }
+
+                hostname = parsed.hostname
+                if not hostname:
+                    return {
+                        "error": "Invalid URL: missing hostname.",
+                        "success": False,
+                    }
+
+                # Collect resolved IP addresses for this hostname.
+                # Checking IPs (not string prefixes) prevents DNS-rebinding
+                # bypasses and catches all reserved/private ranges precisely.
+                candidate_ips: list[str] = []
+                try:
+                    for addr_info in socket.getaddrinfo(hostname, None):
+                        candidate_ips.append(addr_info[4][0])
+                except socket.gaierror:
+                    pass  # unresolvable hostname – let downstream handle
+
+                # Also include a bare numeric IP literal in the hostname field
+                try:
+                    ipaddress.ip_address(hostname)
+                    candidate_ips.append(hostname)
+                except ValueError:
+                    pass
+
+                for ip_str in candidate_ips:
+                    try:
+                        ip = ipaddress.ip_address(ip_str)
+                        if (
+                            ip.is_private
+                            or ip.is_loopback
+                            or ip.is_link_local
+                            or ip.is_reserved
+                            or ip.is_multicast
+                            or ip.is_unspecified
+                        ):
+                            return {
+                                "error": "Access to private or reserved IP addresses is not allowed for security reasons.",
+                                "success": False,
+                            }
+                    except ValueError:
+                        pass
+            except (KeyError, AttributeError, ValueError) as e:
+                logger.error(f"URL validation error: {e}")
+                return {
+                    "error": "Invalid URL format.",
+                    "success": False,
+                }
+
+            # Pre-flight HEAD request to enforce the 50 MB size limit for
+            # URL-based documents (mitigates DoS via oversized downloads).
+            try:
+                import httpx
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0),
+                    follow_redirects=True,
+                ) as http_client:
+                    head_resp = await http_client.head(url)
+                    raw_length = head_resp.headers.get("content-length")
+                    if raw_length and int(raw_length) > MAX_DOCUMENT_SIZE:
+                        return {
+                            "error": f"Document size exceeds the maximum allowed size of {MAX_DOCUMENT_SIZE // (1024 * 1024)}MB.",
+                            "success": False,
+                        }
+            except ImportError:
+                logger.debug("httpx not available; skipping Content-Length pre-check for URL")
+            except Exception:
+                logger.debug("HEAD request for URL content-length check failed; proceeding")
+
             # Use URL directly
             temp_file_path = url
             source_type = "url"
@@ -1075,11 +1216,13 @@ async def _process_document_content(
                     if options.get("focus"):
                         prompt += f"Focus on: {options['focus']}. "
 
-                # Process with agent
+                # Process with agent (wrap synchronous calls in executor)
+                import asyncio
                 if temp_file_path and source_type == "local":
                     # Upload file to agent first if it supports it
                     if hasattr(doc_agent, "process_document"):
-                        doc_result = doc_agent.process_document(
+                        doc_result = await asyncio.to_thread(
+                            doc_agent.process_document,
                             temp_file_path,
                             operation="summarize",
                             options=options,
@@ -1088,12 +1231,19 @@ async def _process_document_content(
                     else:
                         # Fallback: read and send content
                         with open(temp_file_path, "rb") as f:
-                            file_content = f.read()
-                        response_text = doc_agent.chat(
-                            f"{prompt}\n\n[Document: {filename or 'uploaded document'}]"
+                            file_bytes = f.read()
+                        # Best-effort decode of file content to text for summarization
+                        try:
+                            file_text = file_bytes.decode("utf-8", errors="ignore")
+                        except Exception:
+                            file_text = ""
+                        response_text = await asyncio.to_thread(
+                            doc_agent.chat,
+                            f"{prompt}\n\n[Document: {filename or 'uploaded document'}]\n\n{file_text}"
                         )
                 else:
-                    response_text = doc_agent.chat(
+                    response_text = await asyncio.to_thread(
+                        doc_agent.chat,
                         f"{prompt}\n\nDocument URL: {url}"
                     )
             else:
@@ -1142,7 +1292,9 @@ async def _process_document_content(
         elif operation == "analyze":
             # Comprehensive analysis using Document Intelligence agent
             if doc_agent:
-                response_text = doc_agent.chat(
+                import asyncio
+                response_text = await asyncio.to_thread(
+                    doc_agent.chat,
                     f"Analyze this document comprehensively. Extract key insights, "
                     f"main topics, and important data points.\n\n"
                     f"[Document: {filename or url or 'uploaded document'}]"
@@ -1188,9 +1340,9 @@ async def _process_document_content(
 
     finally:
         # Clean up temp file
-        if temp_file_path and source_type == "local" and content:
+        if content_to_clean and source_type == "local":
             try:
-                Path(temp_file_path).unlink(missing_ok=True)
+                Path(content_to_clean).unlink(missing_ok=True)
             except Exception:
                 pass
 
@@ -1298,7 +1450,7 @@ async def copilot_process_document(
             with telemetry.track_execution() as span:
                 if span:
                     span.set_attribute("copilot.conversation_id", conversation_id)
-                    span.set_attribute("copilot.operation", request.operation)
+                    span.set_attribute("copilot.operation", request.operation.value)
                     span.set_attribute("copilot.document_name", request.documentName or "unknown")
                     span.set_attribute("copilot.source", "base64" if request.documentContent else "url")
 
@@ -1306,7 +1458,7 @@ async def copilot_process_document(
                     content=request.documentContent,
                     url=request.documentUrl,
                     filename=request.documentName,
-                    operation=request.operation,
+                    operation=request.operation.value,
                     options=request.options,
                     telemetry=telemetry,
                 )
@@ -1315,7 +1467,7 @@ async def copilot_process_document(
                 content=request.documentContent,
                 url=request.documentUrl,
                 filename=request.documentName,
-                operation=request.operation,
+                operation=request.operation.value,
                 options=request.options,
                 telemetry=None,
             )
@@ -1327,10 +1479,10 @@ async def copilot_process_document(
             )
 
         # Generate suggestions based on operation
-        suggestions = _get_document_suggestions(request.operation)
+        suggestions = _get_document_suggestions(request.operation.value)
 
         logger.info(
-            f"Copilot document processing completed: operation={request.operation}, "
+            f"Copilot document processing completed: operation={request.operation.value}, "
             f"conversation={conversation_id}, "
             f"time_ms={result.get('metadata', {}).get('processing_time_ms', 0)}"
         )
@@ -1338,7 +1490,7 @@ async def copilot_process_document(
         return CopilotDocumentResponse(
             response=result["response"],
             conversationId=conversation_id,
-            operation=request.operation,
+            operation=request.operation.value,
             documentName=request.documentName,
             timestamp=datetime.now(timezone.utc).isoformat(),
             metadata=result.get("metadata"),
