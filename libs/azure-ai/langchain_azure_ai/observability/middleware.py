@@ -601,18 +601,17 @@ class TracingMiddleware(BaseHTTPMiddleware):
                     span.set_attribute("http.status_code", response.status_code)
 
                     if response.status_code >= 400:
-                        from opentelemetry.trace import StatusCode
+                        from opentelemetry.trace import Status, StatusCode
                         span.set_status(
-                            StatusCode.ERROR,
-                            f"HTTP {response.status_code}",
+                            Status(StatusCode.ERROR, f"HTTP {response.status_code}")
                         )
 
                     return response
 
                 except Exception as e:
-                    from opentelemetry.trace import StatusCode
-                    span.set_status(StatusCode.ERROR, str(e))
+                    from opentelemetry.trace import Status, StatusCode
                     span.record_exception(e)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
                     raise
 
         except ImportError:
@@ -656,11 +655,13 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         self._setup_metrics()
 
     def _setup_metrics(self) -> None:
-        """Set up metrics instruments."""
+        """Set up metrics instruments using the shared package meter."""
         try:
-            from opentelemetry import metrics
+            from langchain_azure_ai.observability import get_meter
 
-            self._meter = metrics.get_meter(self.service_name)
+            self._meter = get_meter()
+            if self._meter is None:
+                return
 
             self._request_counter = self._meter.create_counter(
                 name="http.server.requests",
