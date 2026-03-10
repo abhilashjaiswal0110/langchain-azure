@@ -1,0 +1,323 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "9037200887462762332"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "germanywestcentral",
+      "metadata": {
+        "description": "Azure region — must match existing resources"
+      }
+    },
+    "environment": {
+      "type": "string",
+      "defaultValue": "prod",
+      "metadata": {
+        "description": "Environment tag"
+      }
+    },
+    "containerAppName": {
+      "type": "string",
+      "defaultValue": "langchain-agents-prod",
+      "metadata": {
+        "description": "Name for the new Container App"
+      }
+    },
+    "imageTag": {
+      "type": "string",
+      "defaultValue": "latest",
+      "metadata": {
+        "description": "Docker image tag to deploy"
+      }
+    },
+    "containerEnvName": {
+      "type": "string",
+      "defaultValue": "servicenowmcp-env-fybcq3hpz3evo",
+      "metadata": {
+        "description": "Existing Container Apps Environment name"
+      }
+    },
+    "acrName": {
+      "type": "string",
+      "defaultValue": "servicenowmcpacr",
+      "metadata": {
+        "description": "Existing Azure Container Registry name"
+      }
+    },
+    "managedIdentityName": {
+      "type": "string",
+      "defaultValue": "id-gwc-mcp",
+      "metadata": {
+        "description": "Existing Managed Identity name"
+      }
+    },
+    "azureOpenAIEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI endpoint URL"
+      }
+    },
+    "azureOpenAIDeployment": {
+      "type": "string",
+      "defaultValue": "gpt-4o-mini",
+      "metadata": {
+        "description": "Azure OpenAI deployment/model name"
+      }
+    },
+    "azureOpenAIApiVersion": {
+      "type": "string",
+      "defaultValue": "2024-12-01-preview",
+      "metadata": {
+        "description": "Azure OpenAI API version"
+      }
+    },
+    "appInsightsConnectionString": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Application Insights connection string"
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "kv-mcp-nonprd-eiozqzsw",
+      "metadata": {
+        "description": "Existing Key Vault name (used for Key Vault-backed Container App secrets)"
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 0,
+      "maxValue": 10
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 5,
+      "minValue": 1,
+      "maxValue": 10
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('containerAppName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerEnvName'))]",
+        "configuration": {
+          "ingress": {
+            "external": true,
+            "targetPort": 8000,
+            "transport": "http",
+            "allowInsecure": false,
+            "corsPolicy": {
+              "allowedOrigins": [
+                "https://copilotstudio.microsoft.com",
+                "https://web.powerva.microsoft.com",
+                "https://*.powerplatform.com"
+              ],
+              "allowedMethods": [
+                "GET",
+                "POST",
+                "OPTIONS"
+              ],
+              "allowedHeaders": [
+                "Authorization",
+                "Content-Type",
+                "X-API-Key"
+              ],
+              "allowCredentials": true,
+              "maxAge": 3600
+            }
+          },
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+            }
+          ],
+          "secrets": [
+            {
+              "name": "azure-openai-key",
+              "keyVaultUrl": "[format('{0}secrets/langchain-azure-openai-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+            },
+            {
+              "name": "copilot-api-key",
+              "keyVaultUrl": "[format('{0}secrets/langchain-copilot-api-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+            },
+            {
+              "name": "appinsights-connection",
+              "value": "[parameters('appInsightsConnectionString')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "langchain-agents",
+              "image": "[format('{0}/langchain-agents:{1}', reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-07-01').loginServer, parameters('imageTag'))]",
+              "resources": {
+                "cpu": "[json('1.0')]",
+                "memory": "2Gi"
+              },
+              "env": [
+                {
+                  "name": "AZURE_OPENAI_ENDPOINT",
+                  "value": "[parameters('azureOpenAIEndpoint')]"
+                },
+                {
+                  "name": "AZURE_OPENAI_API_KEY",
+                  "secretRef": "azure-openai-key"
+                },
+                {
+                  "name": "AZURE_OPENAI_DEPLOYMENT_NAME",
+                  "value": "[parameters('azureOpenAIDeployment')]"
+                },
+                {
+                  "name": "OPENAI_API_VERSION",
+                  "value": "[parameters('azureOpenAIApiVersion')]"
+                },
+                {
+                  "name": "COPILOT_API_KEY_ENABLED",
+                  "value": "true"
+                },
+                {
+                  "name": "COPILOT_OAUTH_ENABLED",
+                  "value": "false"
+                },
+                {
+                  "name": "COPILOT_API_KEY",
+                  "secretRef": "copilot-api-key"
+                },
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "secretRef": "appinsights-connection"
+                },
+                {
+                  "name": "ENABLE_AZURE_MONITOR",
+                  "value": "true"
+                },
+                {
+                  "name": "USE_AZURE_FOUNDRY",
+                  "value": "false"
+                },
+                {
+                  "name": "ENABLE_IT_AGENTS",
+                  "value": "true"
+                },
+                {
+                  "name": "ENABLE_ENTERPRISE_AGENTS",
+                  "value": "true"
+                },
+                {
+                  "name": "ENABLE_DEEP_AGENTS",
+                  "value": "true"
+                },
+                {
+                  "name": "PORT",
+                  "value": "8000"
+                },
+                {
+                  "name": "LOG_LEVEL",
+                  "value": "INFO"
+                },
+                {
+                  "name": "CORS_ORIGINS",
+                  "value": "https://copilotstudio.microsoft.com,https://web.powerva.microsoft.com"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "initialDelaySeconds": 15,
+                  "periodSeconds": 15,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": "[parameters('maxReplicas')]",
+            "rules": [
+              {
+                "name": "http-scale",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "50"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "tags": {
+        "environment": "[parameters('environment')]",
+        "application": "langchain-agents",
+        "copilot-integration": "enabled",
+        "managed-by": "deploy-copilot.ps1"
+      }
+    }
+  ],
+  "outputs": {
+    "containerAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Base URL of the deployed Container App"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "copilotOpenApiUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "OpenAPI spec URL — import this in Copilot Studio custom connector"
+      },
+      "value": "[format('https://{0}/api/copilot/openapi.json', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "copilotPluginManifestUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Plugin manifest URL for Microsoft 365 Copilot discovery"
+      },
+      "value": "[format('https://{0}/.well-known/ai-plugin.json', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "healthCheckUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Health check URL"
+      },
+      "value": "[format('https://{0}/health', reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    }
+  }
+}

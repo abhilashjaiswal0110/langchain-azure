@@ -884,6 +884,27 @@ class TestObservability:
         assert metrics.duration_ms > 0
         assert metrics.total_tokens == 150
 
+    def test_execution_metrics_set_attribute_stores_in_custom_attributes(self):
+        """set_attribute shim must store values in custom_attributes for OTel compatibility."""
+        from langchain_azure_ai.observability import ExecutionMetrics
+
+        metrics = ExecutionMetrics(agent_name="test", agent_type="custom")
+        metrics.set_attribute("http.status_code", 200)
+        metrics.set_attribute("my.tag", "hello")
+
+        assert metrics.custom_attributes["http.status_code"] == 200
+        assert metrics.custom_attributes["my.tag"] == "hello"
+
+    def test_execution_metrics_set_attribute_overwrites_existing_key(self):
+        """set_attribute must overwrite a previously stored value for the same key."""
+        from langchain_azure_ai.observability import ExecutionMetrics
+
+        metrics = ExecutionMetrics(agent_name="test", agent_type="custom")
+        metrics.set_attribute("key", "first")
+        metrics.set_attribute("key", "second")
+
+        assert metrics.custom_attributes["key"] == "second"
+
     def test_agent_telemetry_track_execution(self, mock_env_vars):
         """Test AgentTelemetry context manager."""
         from langchain_azure_ai.observability import AgentTelemetry

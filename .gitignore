@@ -60,6 +60,16 @@ Thumbs.db
 gha-creds-*.json
 azure-creds-*.json
 *credentials*.json
+*.secrets.json
+*.keyvault.json
+
+# Azure deployment outputs and state (not source artefacts)
+infra/deployment_output*.json
+infra/.deployment/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/.terraform/
+.azure/
 
 # Build and distribution
 build/
