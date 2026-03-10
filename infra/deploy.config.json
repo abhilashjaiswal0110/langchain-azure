@@ -1,0 +1,32 @@
+{
+  "_readme": "Infrastructure configuration for Copilot Studio deployment. SAFE TO COMMIT — no secrets here. Secrets come from env vars or interactive prompt at deploy time.",
+  "_locationNote": "Using germanywestcentral (not westeurope) to co-locate with existing shared resources in this resource group.",
+
+  "subscriptionId": "9adcb1cb-5780-4062-a900-730a3a2ee251",
+  "resourceGroup": "rg-gitba-nonprd-mcp-gewc",
+  "location": "germanywestcentral",
+  "environment": "prod",
+
+  "azureOpenAI": {
+    "endpoint": "https://abhil-mhuf7aa3-swedencentral.openai.azure.com/",
+    "deploymentName": "gpt-4o-mini-aj",
+    "apiVersion": "2024-12-01-preview"
+  },
+
+  "existingResources": {
+    "containerAppsEnvironment": "servicenowmcp-env-fybcq3hpz3evo",
+    "containerRegistry": "servicenowmcpacr",
+    "keyVault": "kv-mcp-nonprd-eiozqzsw",
+    "appInsights": "ai-gwc-mcp",
+    "managedIdentity": "id-gwc-mcp"
+  },
+
+  "newResources": {
+    "containerAppName": "langchain-agents-prod"
+  },
+
+  "scaling": {
+    "minReplicas": 1,
+    "maxReplicas": 5
+  }
+}
