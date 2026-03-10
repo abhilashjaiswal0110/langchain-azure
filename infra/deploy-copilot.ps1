@@ -90,23 +90,13 @@ if ([string]::IsNullOrWhiteSpace($CopilotApiKey)) {
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $CopilotApiKey = ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLower()
-    Write-Host "  ✓ Generated Copilot API key (save this — needed for Copilot Studio setup):" -ForegroundColor Green
-    Write-Host "    COPILOT_API_KEY=$CopilotApiKey" -ForegroundColor Yellow
+    Write-Host "  ✓ Generated Copilot API key and stored in Key Vault." -ForegroundColor Green
+    Write-Host "    Retrieve it with: az keyvault secret show --vault-name $($Config.existingResources.keyVault) --name langchain-copilot-api-key --query value -o tsv" -ForegroundColor DarkYellow
 } else {
     Write-Host "  ✓ Using COPILOT_API_KEY from environment" -ForegroundColor Green
 }
 
-# ACR admin password — fetched here so it's available for both Step 5 (az acr login) and Step 6 (Bicep)
-# The ACR admin user is already enabled (servicenow app uses the same credentials)
-$AcrPassword = az acr credential show `
-    --name $Config.existingResources.containerRegistry `
-    --resource-group $Config.resourceGroup `
-    --query 'passwords[0].value' -o tsv 2>&1
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($AcrPassword)) {
-    Write-Host "  ✗ Could not retrieve ACR credentials. Ensure you have at least Reader access on the ACR." -ForegroundColor Red
-    exit 1
-}
-Write-Host "  ✓ ACR admin credentials retrieved" -ForegroundColor Green
+# Docker push authentication uses 'az acr login' (token-based, no admin credentials needed).
 
 # ============================================================================
 # Step 3 — Verify Azure CLI
@@ -283,10 +273,8 @@ if (-not $SkipDeploy) {
             azureOpenAIEndpoint        = @{ value = $openAIEndpoint }
             azureOpenAIDeployment      = @{ value = $Config.azureOpenAI.deploymentName }
             azureOpenAIApiVersion      = @{ value = $Config.azureOpenAI.apiVersion }
-            azureOpenAIKey             = @{ value = $AzureOpenAIKey }
-            copilotApiKey              = @{ value = $CopilotApiKey }
+            keyVaultName               = @{ value = $kvN }
             appInsightsConnectionString = @{ value = $appInsConnStr }
-            acrPassword                = @{ value = $AcrPassword }
             minReplicas                = @{ value = $Config.scaling.minReplicas }
             maxReplicas                = @{ value = $Config.scaling.maxReplicas }
         }
@@ -337,8 +325,8 @@ if ($script:containerAppUrl) {
     Write-Host "  Plugin Manifest: $($script:pluginUrl)" -ForegroundColor White
     Write-Host ""
 }
-Write-Host "  COPILOT_API_KEY : $CopilotApiKey" -ForegroundColor Yellow
-Write-Host "  (save this — required for Copilot Studio connector setup)" -ForegroundColor DarkYellow
+Write-Host "  COPILOT_API_KEY : $($CopilotApiKey.Substring(0, [Math]::Min(8, $CopilotApiKey.Length)))..." -ForegroundColor Yellow
+Write-Host "  (retrieve full key from Key Vault: az keyvault secret show --vault-name $($Config.existingResources.keyVault) --name langchain-copilot-api-key --query value -o tsv)" -ForegroundColor DarkYellow
 Write-Host ""
 Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
 Write-Host " NEXT STEPS — Copilot Studio Setup" -ForegroundColor Cyan
@@ -355,7 +343,7 @@ Write-Host "    $($script:openApiUrl)" -ForegroundColor Cyan
 Write-Host " 6. Set authentication:" -ForegroundColor White
 Write-Host "    Type           : API Key" -ForegroundColor White
 Write-Host "    Parameter Name : X-API-Key" -ForegroundColor White
-Write-Host "    Value          : $CopilotApiKey" -ForegroundColor Yellow
+Write-Host "    Value          : (retrieve from Key Vault — see command above)" -ForegroundColor DarkYellow
 Write-Host ""
 Write-Host " 7. Test with message: 'Help me reset my password'" -ForegroundColor White
 Write-Host ""
