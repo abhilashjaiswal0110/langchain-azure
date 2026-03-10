@@ -53,20 +53,11 @@ param azureOpenAIApiVersion string = '2024-12-01-preview'
 // ---- Secure Parameters (not logged in deployment history) ----
 
 @secure()
-@description('Azure OpenAI API key')
-param azureOpenAIKey string
-
-@secure()
-@description('Copilot Studio API key for X-API-Key header authentication')
-param copilotApiKey string
-
-@secure()
 @description('Application Insights connection string')
 param appInsightsConnectionString string
 
-@secure()
-@description('ACR admin password for image pull (same credential the servicenow app uses)')
-param acrPassword string
+@description('Existing Key Vault name (used for Key Vault-backed Container App secrets)')
+param keyVaultName string = 'kv-mcp-nonprd-eiozqzsw'
 
 // ---- Scaling ----
 
@@ -92,6 +83,10 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
 
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: managedIdentityName
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
 }
 
 // ============================================================================
@@ -129,29 +124,27 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
       registries: [
         {
+          // Managed-identity pull — no ACR admin credentials required.
           server: acr.properties.loginServer
-          username: acrName
-          passwordSecretRef: 'registry-password'
+          identity: managedIdentity.id
         }
       ]
-      // Secrets stored encrypted in Container App config.
-      // Originals are also backed up to Key Vault by the deploy script.
+      // Secrets backed by Key Vault: values are never embedded in the deployment.
+      // App Insights connection string is a non-secret observable value stored inline.
       secrets: [
         {
           name: 'azure-openai-key'
-          value: azureOpenAIKey
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langchain-azure-openai-key'
+          identity: managedIdentity.id
         }
         {
           name: 'copilot-api-key'
-          value: copilotApiKey
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langchain-copilot-api-key'
+          identity: managedIdentity.id
         }
         {
           name: 'appinsights-connection'
           value: appInsightsConnectionString
-        }
-        {
-          name: 'registry-password'
-          value: acrPassword
         }
       ]
     }

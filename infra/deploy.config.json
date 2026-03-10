@@ -5,7 +5,7 @@
   "subscriptionId": "9adcb1cb-5780-4062-a900-730a3a2ee251",
   "resourceGroup": "rg-gitba-nonprd-mcp-gewc",
   "location": "germanywestcentral",
-  "environment": "prod",
+  "environment": "nonprd",
 
   "azureOpenAI": {
     "endpoint": "https://abhil-mhuf7aa3-swedencentral.openai.azure.com/",

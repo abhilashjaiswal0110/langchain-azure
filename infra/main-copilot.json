@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "1618798044407761002"
+      "templateHash": "9037200887462762332"
     }
   },
   "parameters": {
@@ -78,28 +78,17 @@
         "description": "Azure OpenAI API version"
       }
     },
-    "azureOpenAIKey": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Azure OpenAI API key"
-      }
-    },
-    "copilotApiKey": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Copilot Studio API key for X-API-Key header authentication"
-      }
-    },
     "appInsightsConnectionString": {
       "type": "securestring",
       "metadata": {
         "description": "Application Insights connection string"
       }
     },
-    "acrPassword": {
-      "type": "securestring",
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "kv-mcp-nonprd-eiozqzsw",
       "metadata": {
-        "description": "ACR admin password for image pull (same credential the servicenow app uses)"
+        "description": "Existing Key Vault name (used for Key Vault-backed Container App secrets)"
       }
     },
     "minReplicas": {
@@ -158,26 +147,23 @@
           "registries": [
             {
               "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-07-01').loginServer]",
-              "username": "[parameters('acrName')]",
-              "passwordSecretRef": "registry-password"
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
             }
           ],
           "secrets": [
             {
               "name": "azure-openai-key",
-              "value": "[parameters('azureOpenAIKey')]"
+              "keyVaultUrl": "[format('{0}secrets/langchain-azure-openai-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
             },
             {
               "name": "copilot-api-key",
-              "value": "[parameters('copilotApiKey')]"
+              "keyVaultUrl": "[format('{0}secrets/langchain-copilot-api-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
             },
             {
               "name": "appinsights-connection",
               "value": "[parameters('appInsightsConnectionString')]"
-            },
-            {
-              "name": "registry-password",
-              "value": "[parameters('acrPassword')]"
             }
           ]
         },
