@@ -227,6 +227,15 @@ class ExecutionMetrics:
     agent_type: str = ""
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
 
+    def set_attribute(self, key: str, value: Any) -> None:
+        """Store a custom attribute, compatible with OpenTelemetry span interface.
+
+        Args:
+            key: Attribute name.
+            value: Attribute value.
+        """
+        self.custom_attributes[key] = value
+
     def finalize(self) -> None:
         """Finalize metrics calculation."""
         self.end_time = datetime.now(timezone.utc)
