@@ -12,15 +12,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System build dependencies required by some Python packages (cryptography, etc.)
+# System build dependencies required by some Python packages (cryptography, etc.).
+# Purged after pip install to keep the final image lean and reduce attack surface.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
+    && pip install --no-cache-dir --upgrade pip "python-dotenv>=1.0.0" \
+    && apt-get purge -y --auto-remove gcc g++ \
     && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip and install python-dotenv (used by start_server.py).
-# We use pip directly — no Poetry CLI — to avoid lock file staleness.
-RUN pip install --no-cache-dir --upgrade pip "python-dotenv>=1.0.0"
 
 # --- Dependency layer (cached when these files are unchanged) ---
 # Poetry's build backend (declared in pyproject.toml) requires README.md,
@@ -39,8 +38,16 @@ RUN pip install --no-cache-dir --no-deps .
 
 EXPOSE 8000
 
-# Liveness probe target: /health endpoint served by the FastAPI app
+# Liveness probe target: /health endpoint served by the FastAPI app.
+# Explicit 5 s socket timeout prevents the probe from hanging when the app
+# is unresponsive, ensuring Docker triggers the restart threshold promptly.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "
+import sys, urllib.request
+try:
+    urllib.request.urlopen('http://localhost:8000/health', timeout=5)
+except Exception:
+    sys.exit(1)
+"
 
 CMD ["python", "start_server.py"]
