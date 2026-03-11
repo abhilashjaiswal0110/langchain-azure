@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
@@ -283,7 +283,7 @@ class CopilotDocumentResponse(BaseModel):
     operation: str = Field(..., description="Operation that was performed")
     documentName: Optional[str] = Field(None, description="Processed document name")
     timestamp: str = Field(..., description="ISO 8601 timestamp")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: Optional[str] = Field(None, description="Processing metadata as JSON string (page count, processing time, etc.)")
     suggestions: List[str] = Field(default_factory=list, description="Follow-up suggestions")
 
     class Config:
@@ -294,11 +294,7 @@ class CopilotDocumentResponse(BaseModel):
                 "operation": "summarize",
                 "documentName": "quarterly_report.pdf",
                 "timestamp": "2026-02-26T10:30:00Z",
-                "metadata": {
-                    "pages_processed": 12,
-                    "tables_found": 3,
-                    "processing_time_ms": 2500
-                },
+                "metadata": '{"pages_processed": 12, "tables_found": 3, "processing_time_ms": 2500}',
                 "suggestions": [
                     "Extract all tables from this document",
                     "Analyze key financial metrics",
@@ -379,20 +375,48 @@ async def get_plugin_manifest(request: Request):
     return JSONResponse(content=manifest)
 
 
-@router.get(
+@router.api_route(
     "/openapi.json",
+    methods=["GET", "HEAD", "OPTIONS"],
     response_model=Dict[str, Any],
     summary="Get OpenAPI Specification",
     description="Returns OpenAPI 2.0 (Swagger) specification for Copilot Studio custom connector.",
+    # Authentication is intentionally NOT required here — the spec must be
+    # publicly accessible so that Copilot Studio's import tool can download it.
+    include_in_schema=True,
 )
 async def get_openapi_spec(request: Request):
     """Get OpenAPI 2.0 specification for Copilot Studio.
 
-    Copilot Studio requires OpenAPI 2.0 format (Swagger) for custom connectors.
-    This endpoint provides a compatible specification.
+    This endpoint is intentionally unauthenticated and must remain so.
+    Copilot Studio's import tool downloads the spec before any API key is
+    configured; blocking it would break connector import.
+
+    Explicit CORS headers are set here (in addition to middleware) to guarantee
+    the spec is downloadable from any Microsoft portal origin regardless of
+    middleware configuration or ordering.
     """
-    base_url = str(request.base_url).rstrip("/")
-    host = request.url.netloc
+    # Handle preflight immediately without touching the spec logic
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
+
+    # Use the forwarded host if present (reverse-proxy / Container Apps ingress)
+    host = (
+        request.headers.get("X-Forwarded-Host")
+        or request.headers.get("X-Original-Host")
+        or request.url.netloc
+    )
+    # Strip port when it is the default HTTPS port to satisfy strict validators
+    if host.endswith(":443"):
+        host = host[:-4]
 
     openapi_spec = {
         "swagger": "2.0",
@@ -405,19 +429,19 @@ async def get_openapi_spec(request: Request):
             "version": "2.0.0",
             "contact": {
                 "name": "Azure AI Foundry Team",
-                "url": "https://github.com/microsoft/langchain-azure"
-            }
+                "email": os.getenv("COPILOT_CONTACT_EMAIL", "support@example.com"),
+            },
         },
         "host": host,
         "basePath": "/api/copilot",
-        "schemes": ["https"] if request.url.scheme == "https" else ["http", "https"],
+        "schemes": ["https"],
         "consumes": ["application/json"],
         "produces": ["application/json"],
         "securityDefinitions": {
             "apiKey": {
                 "type": "apiKey",
                 "name": "X-API-Key",
-                "in": "header"
+                "in": "header",
             }
         },
         "security": [{"apiKey": []}] if security_config.api_key_enabled else [],
@@ -515,14 +539,8 @@ async def get_openapi_spec(request: Request):
                             "in": "path",
                             "required": True,
                             "type": "string",
-                            "description": "The agent identifier",
-                            "enum": [
-                                "helpdesk", "servicenow", "hitl_support",
-                                "research", "content", "data_analyst", "document",
-                                "code_assistant", "rag", "document_intelligence",
-                                "it_operations", "sales_intelligence", "recruitment",
-                                "software_development"
-                            ]
+                            "description": "Agent ID to target directly. Valid values: helpdesk, servicenow, hitl_support, research, content, data_analyst, document, code_assistant, rag, document_intelligence, it_operations, sales_intelligence, recruitment, software_development",
+                            "x-ms-summary": "Agent ID"
                         },
                         {
                             "name": "body",
@@ -575,7 +593,7 @@ async def get_openapi_spec(request: Request):
                     "operationId": "healthCheck",
                     "summary": "Health Check",
                     "description": "Check the health status of the API.",
-                    "x-ms-visibility": "internal",
+                    "x-ms-visibility": "advanced",
                     "responses": {
                         "200": {
                             "description": "Service is healthy",
@@ -629,11 +647,6 @@ async def get_openapi_spec(request: Request):
                                         "type": "string",
                                         "description": "Conversation ID for context continuity",
                                         "x-ms-summary": "Conversation ID"
-                                    },
-                                    "options": {
-                                        "type": "object",
-                                        "description": "Additional processing options",
-                                        "x-ms-summary": "Options"
                                     }
                                 }
                             }
@@ -756,8 +769,8 @@ async def get_openapi_spec(request: Request):
                         "description": "ISO 8601 timestamp"
                     },
                     "metadata": {
-                        "type": "object",
-                        "description": "Processing metadata"
+                        "type": "string",
+                        "description": "Processing metadata as JSON string (page count, processing time, etc.)"
                     },
                     "suggestions": {
                         "type": "array",
@@ -769,7 +782,23 @@ async def get_openapi_spec(request: Request):
         }
     }
 
-    return JSONResponse(content=openapi_spec)
+    # Explicit CORS and caching headers on the spec response.
+    # These are set HERE (not just in middleware) so the response is always
+    # accessible even if middleware ordering changes or middleware is disabled.
+    # Copilot Studio's import tool requires unrestricted access to this URL.
+    return JSONResponse(
+        content=openapi_spec,
+        media_type="application/json; charset=utf-8",
+        headers={
+            # Allow any origin to read this public discovery document
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+            # Cache for 5 minutes — reduces repeat fetches from Copilot Studio
+            "Cache-Control": "public, max-age=300",
+            "Vary": "Accept-Encoding",
+        },
+    )
 
 
 # ============================================================================
@@ -1493,7 +1522,7 @@ async def copilot_process_document(
             operation=request.operation.value,
             documentName=request.documentName,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            metadata=result.get("metadata"),
+            metadata=json.dumps(result.get("metadata")) if result.get("metadata") else None,
             suggestions=suggestions,
         )
 

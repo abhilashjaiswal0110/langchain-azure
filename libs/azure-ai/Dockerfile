@@ -42,12 +42,6 @@ EXPOSE 8000
 # Explicit 5 s socket timeout prevents the probe from hanging when the app
 # is unresponsive, ensuring Docker triggers the restart threshold promptly.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "
-import sys, urllib.request
-try:
-    urllib.request.urlopen('http://localhost:8000/health', timeout=5)
-except Exception:
-    sys.exit(1)
-"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)" || exit 1
 
 CMD ["python", "start_server.py"]
