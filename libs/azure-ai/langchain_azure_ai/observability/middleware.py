@@ -61,7 +61,18 @@ class RateLimitConfig:
     by_api_key: bool = True
     user_header: str = "X-User-ID"
     api_key_header: str = "X-API-Key"
-    exempt_paths: Tuple[str, ...] = ("/health", "/metrics", "/docs", "/openapi.json")
+    exempt_paths: Tuple[str, ...] = (
+        "/health",
+        "/metrics",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        # Copilot Studio discovery endpoints — must never be rate-limited so
+        # that the Copilot Studio import tool can always download the spec.
+        "/api/copilot/openapi.json",
+        "/api/copilot/plugin-manifest",
+        "/.well-known/ai-plugin.json",
+    )
     endpoint_limits: Dict[str, int] = field(default_factory=dict)
 
 
@@ -388,12 +399,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Process request
         response = await call_next(request)
 
-        # Add rate limit headers to successful responses
-        response.headers["RateLimit-Limit"] = str(self.config.requests_per_minute)
-        # Guard against float('inf') returned for exempt paths
-        safe_remaining = min(remaining, self.config.requests_per_minute)
-        response.headers["RateLimit-Remaining"] = str(int(safe_remaining))
-        response.headers["RateLimit-Reset"] = str(int(time.time() + 60))
+        # Only add rate-limit headers for non-exempt paths so discovery
+        # endpoints (spec, manifests) never expose confusing rate-limit state.
+        if client_key != "exempt":
+            response.headers["RateLimit-Limit"] = str(self.config.requests_per_minute)
+            response.headers["RateLimit-Remaining"] = str(int(remaining))
+            response.headers["RateLimit-Reset"] = str(int(time.time() + 60))
 
         return response
 

@@ -53,11 +53,20 @@ param azureOpenAIApiVersion string = '2024-12-01-preview'
 // ---- Secure Parameters (not logged in deployment history) ----
 
 @secure()
+@description('Azure OpenAI API key')
+param azureOpenAIKey string
+
+@secure()
+@description('Copilot Studio API key')
+param copilotApiKey string
+
+@secure()
+@description('ACR admin password for image pull')
+param acrPassword string
+
+@secure()
 @description('Application Insights connection string')
 param appInsightsConnectionString string
-
-@description('Existing Key Vault name (used for Key Vault-backed Container App secrets)')
-param keyVaultName string = 'kv-mcp-nonprd-eiozqzsw'
 
 // ---- Scaling ----
 
@@ -85,10 +94,6 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   name: managedIdentityName
 }
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
 // ============================================================================
 // Container App
 // ============================================================================
@@ -114,33 +119,38 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           allowedOrigins: [
             'https://copilotstudio.microsoft.com'
             'https://web.powerva.microsoft.com'
-            'https://*.powerplatform.com'
+            'https://make.powerautomate.com'
+            'https://flow.microsoft.com'
+            'https://admin.powerplatform.microsoft.com'
+            'https://powerautomate.microsoft.com'
+            // Wildcard patterns are not supported in Azure Container Apps corsPolicy;
+            // add tenant-specific URLs here if needed.
           ]
-          allowedMethods: ['GET', 'POST', 'OPTIONS']
-          allowedHeaders: ['Authorization', 'Content-Type', 'X-API-Key']
-          allowCredentials: true
+          allowedMethods: ['GET', 'POST', 'OPTIONS', 'HEAD']
+          allowedHeaders: ['*']
+          allowCredentials: false
           maxAge: 3600
         }
       }
       registries: [
         {
-          // Managed-identity pull — no ACR admin credentials required.
           server: acr.properties.loginServer
-          identity: managedIdentity.id
+          username: acrName
+          passwordSecretRef: 'registry-password'
         }
       ]
-      // Secrets backed by Key Vault: values are never embedded in the deployment.
-      // App Insights connection string is a non-secret observable value stored inline.
       secrets: [
         {
           name: 'azure-openai-key'
-          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langchain-azure-openai-key'
-          identity: managedIdentity.id
+          value: azureOpenAIKey
         }
         {
           name: 'copilot-api-key'
-          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/langchain-copilot-api-key'
-          identity: managedIdentity.id
+          value: copilotApiKey
+        }
+        {
+          name: 'registry-password'
+          value: acrPassword
         }
         {
           name: 'appinsights-connection'

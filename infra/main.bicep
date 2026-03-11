@@ -299,12 +299,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           allowedOrigins: [
             'https://copilotstudio.microsoft.com'
             'https://web.powerva.microsoft.com'
-            // Note: Add your specific Power Platform tenant URLs here
-            // Example: 'https://your-tenant.api.powerplatform.com'
+            'https://make.powerautomate.com'
+            'https://flow.microsoft.com'
+            'https://admin.powerplatform.microsoft.com'
+            'https://powerautomate.microsoft.com'
+            // Wildcard patterns are not supported in Azure Container Apps corsPolicy;
+            // add tenant-specific URLs here if needed.
           ]
-          allowedMethods: ['GET', 'POST', 'OPTIONS']
+          allowedMethods: ['GET', 'POST', 'OPTIONS', 'HEAD']
           allowedHeaders: ['*']
-          allowCredentials: true
+          allowCredentials: false
           maxAge: 3600
         }
       }

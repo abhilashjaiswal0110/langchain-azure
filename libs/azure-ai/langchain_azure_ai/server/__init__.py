@@ -596,11 +596,18 @@ This API provides access to LangChain agents integrated with Azure AI Foundry.
     },
 )
 
-# Add CORS middleware
+# Add CORS middleware.
+# When CORS_ORIGINS is the default wildcard "*", allow_credentials must be
+# False because browsers disallows `Access-Control-Allow-Credentials: true`
+# combined with `Access-Control-Allow-Origin: *`.  Discovery endpoints like
+# the OpenAPI spec set their own explicit `Access-Control-Allow-Origin: *`
+# header directly, so they are always accessible from any browser origin.
+_cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+_allow_credentials = "*" not in _cors_origins  # credentials only with specific origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -611,6 +618,18 @@ if OBSERVABILITY_AVAILABLE:
     rate_limit_config = RateLimitConfig(
         requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "60")),
         burst_size=int(os.getenv("RATE_LIMIT_BURST", "10")),
+        # Exempt Copilot Studio discovery endpoints so they are always accessible
+        # regardless of traffic load. Rate-limiting these would cause Copilot Studio
+        # to fail with "We weren't able to download the OpenAPI file" errors.
+        exempt_paths=(
+            "/health",
+            "/metrics",
+            "/docs",
+            "/openapi.json",
+            "/api/copilot/openapi.json",
+            "/api/copilot/plugin-manifest",
+            "/.well-known/ai-plugin.json",
+        ),
         endpoint_limits={
             # Lower limits for expensive DeepAgent endpoints
             "/api/deepagent/it_operations/chat": 30,
