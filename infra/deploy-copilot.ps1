@@ -90,8 +90,10 @@ if ([string]::IsNullOrWhiteSpace($CopilotApiKey)) {
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $CopilotApiKey = ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLower()
-    Write-Host "  ✓ Generated Copilot API key (save this — needed for Copilot Studio setup):" -ForegroundColor Green
-    Write-Host "      COPILOT_API_KEY=$CopilotApiKey" -ForegroundColor Cyan
+    $env:COPILOT_API_KEY = $CopilotApiKey
+    Write-Host "  ✓ Generated Copilot API key and set COPILOT_API_KEY for this session." -ForegroundColor Green
+    Write-Host "    The key will be stored in Key Vault during deployment. Retrieve later with:" -ForegroundColor Yellow
+    Write-Host "    az keyvault secret show --vault-name <KV-NAME> --name langchain-copilot-api-key --query value -o tsv" -ForegroundColor DarkCyan
 } else {
     Write-Host "  ✓ Using COPILOT_API_KEY from environment" -ForegroundColor Green
 }
@@ -194,11 +196,18 @@ az keyvault secret set `
     --output none 2>&1 | Out-Null
 Write-Host "  ✓ Secret backup attempted (silent if KV write permission is absent)" -ForegroundColor Green
 
-# ACR admin password for image pull in Container App
+# ACR admin password for image pull in Container App.
+# SECURITY NOTE: The admin account is a global credential with push+pull rights
+# across the entire registry. Using managed identity with AcrPull role is
+# preferable but requires RBAC propagation before the first image pull, which
+# causes ordering failures in net-new deployments when the Bicep role-assignment
+# and Container App resource are created in the same deployment batch.
+# TODO: migrate to managed identity once a two-phase deployment (RBAC first,
+# then Container App) or explicit dependsOn ordering in Bicep is in place.
 $AcrPassword = az acr credential show `
     --name $acrN `
     --resource-group $rg `
-    --query 'passwords[0].value' -o tsv 2>&1
+    --query 'passwords[0].value' -o tsv 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($AcrPassword)) {
     Write-Host "  ✗ Failed to retrieve ACR admin password. Ensure admin is enabled on $acrN" -ForegroundColor Red
     exit 1
@@ -338,7 +347,9 @@ if ($script:containerAppUrl) {
     Write-Host "  Plugin Manifest: $($script:pluginUrl)" -ForegroundColor White
     Write-Host ""
 }
-Write-Host "  COPILOT_API_KEY : $CopilotApiKey" -ForegroundColor Cyan
+$maskedKey = $CopilotApiKey.Substring(0, [Math]::Min(8, $CopilotApiKey.Length)) + "..."
+Write-Host "  COPILOT_API_KEY : $maskedKey (full value stored in Key Vault)" -ForegroundColor Yellow
+Write-Host "  Retrieve: az keyvault secret show --vault-name $kvN --name langchain-copilot-api-key --query value -o tsv" -ForegroundColor DarkCyan
 Write-Host "  (save this — required for Copilot Studio connector setup)" -ForegroundColor DarkYellow
 Write-Host ""
 Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
@@ -356,6 +367,6 @@ Write-Host "    $($script:openApiUrl)" -ForegroundColor Cyan
 Write-Host " 6. Set authentication:" -ForegroundColor White
 Write-Host "    Type           : API Key" -ForegroundColor White
 Write-Host "    Parameter Name : X-API-Key" -ForegroundColor White
-Write-Host "    Value          : $CopilotApiKey" -ForegroundColor Cyan
+Write-Host "    Value          : (retrieve: az keyvault secret show --vault-name $kvN --name langchain-copilot-api-key --query value -o tsv)" -ForegroundColor Cyan
 Write-Host " 7. Test with message: 'Help me reset my password'" -ForegroundColor White
 Write-Host ""

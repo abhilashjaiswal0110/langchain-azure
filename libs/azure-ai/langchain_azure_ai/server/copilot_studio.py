@@ -294,11 +294,7 @@ class CopilotDocumentResponse(BaseModel):
                 "operation": "summarize",
                 "documentName": "quarterly_report.pdf",
                 "timestamp": "2026-02-26T10:30:00Z",
-                "metadata": {
-                    "pages_processed": 12,
-                    "tables_found": 3,
-                    "processing_time_ms": 2500
-                },
+                "metadata": '{"pages_processed": 12, "tables_found": 3, "processing_time_ms": 2500}',
                 "suggestions": [
                     "Extract all tables from this document",
                     "Analyze key financial metrics",

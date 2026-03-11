@@ -598,12 +598,14 @@ This API provides access to LangChain agents integrated with Azure AI Foundry.
 
 # Add CORS middleware.
 # When CORS_ORIGINS is the default wildcard "*", allow_credentials must be
-# False because browsers disallows `Access-Control-Allow-Credentials: true`
+# False because browsers disallow `Access-Control-Allow-Credentials: true`
 # combined with `Access-Control-Allow-Origin: *`.  Discovery endpoints like
 # the OpenAPI spec set their own explicit `Access-Control-Allow-Origin: *`
 # header directly, so they are always accessible from any browser origin.
-_cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
-_allow_credentials = "*" not in _cors_origins  # credentials only with specific origins
+_raw_cors_origins = os.getenv("CORS_ORIGINS", "*")
+_cors_origins = [origin.strip() for origin in _raw_cors_origins.split(",") if origin.strip()]
+_is_wildcard = len(_cors_origins) == 1 and _cors_origins[0] == "*"
+_allow_credentials = not _is_wildcard  # credentials only with specific origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -625,6 +627,7 @@ if OBSERVABILITY_AVAILABLE:
             "/health",
             "/metrics",
             "/docs",
+            "/redoc",
             "/openapi.json",
             "/api/copilot/openapi.json",
             "/api/copilot/plugin-manifest",

@@ -133,6 +133,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       }
       registries: [
+        // SECURITY NOTE: ACR admin credentials are used here as a temporary bootstrapping
+        // measure. Managed identity with AcrPull role is the preferred approach, but
+        // requires the role assignment to propagate before the Container App's first image
+        // pull, which causes ordering failures when both are created in the same deployment.
+        // TODO: migrate to identity-based registry pull once a two-phase deployment strategy
+        // (role assignment first, then Container App) is implemented in deploy-copilot.ps1.
         {
           server: acr.properties.loginServer
           username: acrName
