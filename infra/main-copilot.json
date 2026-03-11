@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "9037200887462762332"
+      "templateHash": "8949087110043700176"
     }
   },
   "parameters": {
@@ -78,17 +78,28 @@
         "description": "Azure OpenAI API version"
       }
     },
+    "azureOpenAIKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Azure OpenAI API key"
+      }
+    },
+    "copilotApiKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Copilot Studio API key"
+      }
+    },
+    "acrPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "ACR admin password for image pull"
+      }
+    },
     "appInsightsConnectionString": {
       "type": "securestring",
       "metadata": {
         "description": "Application Insights connection string"
-      }
-    },
-    "keyVaultName": {
-      "type": "string",
-      "defaultValue": "kv-mcp-nonprd-eiozqzsw",
-      "metadata": {
-        "description": "Existing Key Vault name (used for Key Vault-backed Container App secrets)"
       }
     },
     "minReplicas": {
@@ -128,38 +139,43 @@
               "allowedOrigins": [
                 "https://copilotstudio.microsoft.com",
                 "https://web.powerva.microsoft.com",
-                "https://*.powerplatform.com"
+                "https://make.powerautomate.com",
+                "https://flow.microsoft.com",
+                "https://admin.powerplatform.microsoft.com",
+                "https://powerautomate.microsoft.com"
               ],
               "allowedMethods": [
                 "GET",
                 "POST",
-                "OPTIONS"
+                "OPTIONS",
+                "HEAD"
               ],
               "allowedHeaders": [
-                "Authorization",
-                "Content-Type",
-                "X-API-Key"
+                "*"
               ],
-              "allowCredentials": true,
+              "allowCredentials": false,
               "maxAge": 3600
             }
           },
           "registries": [
             {
               "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-07-01').loginServer]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+              "username": "[parameters('acrName')]",
+              "passwordSecretRef": "registry-password"
             }
           ],
           "secrets": [
             {
               "name": "azure-openai-key",
-              "keyVaultUrl": "[format('{0}secrets/langchain-azure-openai-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+              "value": "[parameters('azureOpenAIKey')]"
             },
             {
               "name": "copilot-api-key",
-              "keyVaultUrl": "[format('{0}secrets/langchain-copilot-api-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri)]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]"
+              "value": "[parameters('copilotApiKey')]"
+            },
+            {
+              "name": "registry-password",
+              "value": "[parameters('acrPassword')]"
             },
             {
               "name": "appinsights-connection",
